@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import date, timedelta
-from typing import Iterable
+from typing import Callable, Iterable, Optional
 
 from .classifier import classify_lot_for_tax
+from .fmv_2018 import compute_grandfathered_cost
 from .models import (
     EQUITY_LIKE_CATEGORIES,
     Lot,
@@ -28,6 +29,10 @@ EQUITY_LTCG_DAYS = 365  # > 12 months. We use strict >, see is_ltcg_eligible.
 DEBT_LTCG_DAYS = 730  # > 24 months for pre-Apr-2023 debt
 ELSS_LOCKIN_DAYS = 3 * 365 + 1  # 3 years, rounding via days; we add 1 to be conservative
 SOLUTION_LOCKIN_DAYS = 5 * 365 + 1
+GRANDFATHERING_CUTOFF = date(2018, 1, 31)  # Sec 112A: lots acquired on/before this date
+
+NavLookup = Callable[[Scheme], Optional[float]]
+FmvLookup = Callable[[Scheme], Optional[float]]
 
 
 def build_lots(scheme: Scheme) -> list[Lot]:
@@ -87,8 +92,8 @@ def _lockin_check(scheme: Scheme, lot: Lot, today: date) -> tuple[bool, str | No
 
 
 def _exit_load_check(scheme: Scheme, lot: Lot, today: date,
-                     equity_exit_load_days: int = 365) -> tuple[bool, str | None]:
-    """Default heuristic: 1% exit load if under 365 days for equity-like funds.
+                     equity_exit_load_days: int) -> tuple[bool, str | None]:
+    """Heuristic: 1% exit load if under `equity_exit_load_days` days for equity funds.
 
     For LTCG harvesting the lot must already be >365 days (equity), so this only
     flags weird cases. For debt funds we don't model exit load (varies widely).
@@ -116,11 +121,57 @@ def _ltcg_eligible(scheme: Scheme, lot: Lot, today: date) -> bool:
     return False
 
 
-def evaluate_lots(schemes: Iterable[Scheme], nav_lookup, today: date) -> list[LotEvaluation]:
+def _apply_grandfathering(scheme: Scheme, lot: Lot, cur_nav: float,
+                          fmv_lookup: Optional[FmvLookup]
+                          ) -> tuple[float, bool, Optional[str]]:
+    """Return (effective_cost_per_unit, grandfathered_flag, note).
+
+    Only applies to equity-like lots acquired on or before 31-Jan-2018. If FMV is
+    unavailable for such a lot, we conservatively fall back to actual cost and
+    surface a note so the user knows to verify.
+    """
+    if scheme.category not in EQUITY_LIKE_CATEGORIES:
+        return lot.cost_per_unit, False, None
+    if lot.purchase_date > GRANDFATHERING_CUTOFF:
+        return lot.cost_per_unit, False, None
+
+    if fmv_lookup is None:
+        return (
+            lot.cost_per_unit,
+            False,
+            "Pre-2018 equity lot — Sec 112A grandfathering not applied "
+            "(FMV lookup disabled); gain may be overstated",
+        )
+
+    fmv = fmv_lookup(scheme)
+    if fmv is None or fmv <= 0:
+        return (
+            lot.cost_per_unit,
+            False,
+            "Pre-2018 equity lot — 31-Jan-2018 FMV unavailable; gain may be overstated. "
+            "Look up the FMV manually and adjust.",
+        )
+
+    effective = compute_grandfathered_cost(lot.cost_per_unit, fmv, cur_nav)
+    if abs(effective - lot.cost_per_unit) < 1e-6:
+        return effective, False, None
+    return effective, True, (
+        f"Grandfathered cost: actual ₹{lot.cost_per_unit:.4f}/u → "
+        f"effective ₹{effective:.4f}/u (FMV 31-Jan-2018: ₹{fmv:.4f}/u)"
+    )
+
+
+def evaluate_lots(schemes: Iterable[Scheme],
+                  nav_lookup: NavLookup,
+                  today: date,
+                  fmv_lookup: Optional[FmvLookup] = None,
+                  equity_exit_load_days: int = 365) -> list[LotEvaluation]:
     """Build lots for every scheme and evaluate each against today's NAV.
 
-    `nav_lookup(scheme) -> float | None` returns the current NAV for a scheme. If
-    the NAV is unknown, the lot is excluded with a clear reason.
+    `nav_lookup(scheme)` returns the current NAV for a scheme; `None` means the
+    lot is excluded with a clear reason. `fmv_lookup(scheme)` returns the
+    31-Jan-2018 NAV for grandfathering; `None` (the default) disables
+    grandfathering — gain will be computed against actual cost.
     """
     out: list[LotEvaluation] = []
     for scheme in schemes:
@@ -130,16 +181,26 @@ def evaluate_lots(schemes: Iterable[Scheme], nav_lookup, today: date) -> list[Lo
         nav = nav_lookup(scheme)
         for lot in lots:
             excluded: str | None = None
+            cur_nav = 0.0
             if nav is None:
-                excluded = "NAV unavailable — verify scheme code/ISIN against AMFI"
-                cur_nav = 0.0
-                gain = 0.0
+                if scheme.is_suspended:
+                    excluded = "Scheme suspended/wound-up — cannot transact"
+                else:
+                    excluded = ("NAV unavailable on AMFI feed — scheme may be suspended, "
+                                "wound-up, or the ISIN/scheme code is wrong. Verify manually.")
             else:
                 cur_nav = float(nav)
-                gain = (cur_nav - lot.cost_per_unit) * lot.units_remaining
+
+            if scheme.is_suspended and excluded is None:
+                excluded = "Scheme suspended/wound-up — cannot transact"
+
+            effective_cost, grandfathered, gf_note = _apply_grandfathering(
+                scheme, lot, cur_nav, fmv_lookup
+            )
+            gain = (cur_nav - effective_cost) * lot.units_remaining if nav is not None else 0.0
 
             locked, lock_reason = _lockin_check(scheme, lot, today)
-            has_load, load_reason = _exit_load_check(scheme, lot, today)
+            has_load, load_reason = _exit_load_check(scheme, lot, today, equity_exit_load_days)
             ltcg = _ltcg_eligible(scheme, lot, today)
 
             if excluded is None:
@@ -168,5 +229,8 @@ def evaluate_lots(schemes: Iterable[Scheme], nav_lookup, today: date) -> list[Lo
                 has_exit_load=has_load,
                 exit_load_reason=load_reason,
                 excluded_reason=excluded,
+                grandfathered=grandfathered,
+                effective_cost_per_unit=effective_cost if grandfathered else None,
+                grandfathering_note=gf_note,
             ))
     return out

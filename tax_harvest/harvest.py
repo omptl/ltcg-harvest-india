@@ -47,6 +47,7 @@ def build_plan(
     plan.excluded_lots = [e for e in evals if e.excluded_reason is not None]
     plan.loss_candidates = [e for e in evals
                             if e.excluded_reason is None and e.unrealized_gain <= 0]
+    plan.grandfathered_lots = [e for e in evals if e.grandfathered]
 
     # Sort by gain_per_unit desc — maximizes basis reset for the same gain budget.
     harvestable.sort(key=lambda e: e.gain_per_unit, reverse=True)

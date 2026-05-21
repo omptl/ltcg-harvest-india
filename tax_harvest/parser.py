@@ -7,12 +7,26 @@ classify each scheme.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
-from .classifier import classify_scheme, refine_debt_category
+from .classifier import (
+    classify_scheme,
+    load_suspended_isins,
+    refine_debt_category,
+)
 from .models import CASData, Scheme, SchemeCategory, Transaction, TxnType
+
+
+# Heuristic regex for NRI status — checked against any free-form field we surface.
+_NRI_PATTERN = re.compile(r"\b(nri|non[\s-]?resident)\b", re.IGNORECASE)
+# Heuristic for joint holding indication.
+_JOINT_PATTERN = re.compile(
+    r"\b(joint|anyone\s*or\s*survivor|either\s*or\s*survivor|second\s*holder|jointly)\b",
+    re.IGNORECASE,
+)
 
 
 # CAS transaction descriptions are inconsistent across statement providers. We map
@@ -62,8 +76,14 @@ def _parse_date(value: Any) -> datetime.date | None:
     return None
 
 
-def parse_cas(pdf_path: str | Path, password: str) -> CASData:
+def parse_cas(pdf_path: str | Path, password: str,
+              overrides: Optional[dict[str, SchemeCategory]] = None,
+              suspended_isins: Optional[dict[str, str]] = None) -> CASData:
     """Parse a CAS PDF and return a normalized CASData object.
+
+    `overrides` (ISIN -> SchemeCategory) is forwarded to the classifier so users
+    can correct misclassifications. `suspended_isins` (ISIN -> note) flags
+    schemes as suspended/wound-up regardless of NAV availability.
 
     Raises RuntimeError if casparser is unavailable, the file is missing, or the
     password is wrong. The exception message is safe to surface to the user.
@@ -79,12 +99,16 @@ def parse_cas(pdf_path: str | Path, password: str) -> CASData:
     except Exception as exc:  # casparser raises various exception types
         raise RuntimeError(f"Could not parse CAS PDF (password correct?): {exc}") from exc
 
-    return _from_casparser_dict(raw)
+    suspended_isins = suspended_isins if suspended_isins is not None else load_suspended_isins()
+    return _from_casparser_dict(raw, overrides=overrides, suspended_isins=suspended_isins)
 
 
-def _from_casparser_dict(raw: dict) -> CASData:
+def _from_casparser_dict(raw: dict,
+                         overrides: Optional[dict[str, SchemeCategory]] = None,
+                         suspended_isins: Optional[dict[str, str]] = None) -> CASData:
     investor = raw.get("investor_info", {}) or {}
     statement_period = raw.get("statement_period", {}) or {}
+    suspended_isins = suspended_isins or {}
 
     cas = CASData(
         investor_name=investor.get("name", "") or "",
@@ -94,19 +118,46 @@ def _from_casparser_dict(raw: dict) -> CASData:
         statement_period_to=_parse_date(statement_period.get("to")),
     )
 
+    # Heuristic NRI / joint-holding detection over any free-form metadata casparser
+    # surfaces. This is best-effort — users can override via CLI flags.
+    text_blob = " ".join(str(v) for v in _flatten_strings(investor))
+    for folio_block in raw.get("folios", []) or []:
+        text_blob += " " + " ".join(_flatten_strings(folio_block))
+    if _NRI_PATTERN.search(text_blob):
+        cas.is_nri = True
+    if _JOINT_PATTERN.search(text_blob):
+        cas.has_joint_holdings = True
+
     for folio_block in raw.get("folios", []) or []:
         folio_no = folio_block.get("folio", "") or ""
         amc = folio_block.get("amc", "") or ""
-        # Some statements indicate NRI on folio holder line; we leave detection coarse.
         for scheme_block in folio_block.get("schemes", []) or []:
-            scheme = _scheme_from_block(scheme_block, folio_no, amc)
-            if scheme is not None:
-                cas.schemes.append(scheme)
+            scheme = _scheme_from_block(scheme_block, folio_no, amc, overrides=overrides)
+            if scheme is None:
+                continue
+            if scheme.isin and scheme.isin in suspended_isins:
+                scheme.is_suspended = True
+            cas.schemes.append(scheme)
 
     return cas
 
 
-def _scheme_from_block(block: dict, folio: str, amc: str) -> Scheme | None:
+def _flatten_strings(value: Any) -> list[str]:
+    """Walk a nested dict/list/str structure and yield every string value found."""
+    out: list[str] = []
+    if isinstance(value, str):
+        out.append(value)
+    elif isinstance(value, dict):
+        for v in value.values():
+            out.extend(_flatten_strings(v))
+    elif isinstance(value, (list, tuple)):
+        for v in value:
+            out.extend(_flatten_strings(v))
+    return out
+
+
+def _scheme_from_block(block: dict, folio: str, amc: str,
+                       overrides: Optional[dict[str, SchemeCategory]] = None) -> Scheme | None:
     name = (block.get("scheme") or "").strip()
     if not name:
         return None
@@ -133,7 +184,7 @@ def _scheme_from_block(block: dict, folio: str, amc: str) -> Scheme | None:
             description=txn.get("description", "") or "",
         ))
 
-    scheme.category = classify_scheme(scheme)
+    scheme.category = classify_scheme(scheme, overrides=overrides)
     first_purchase = next(
         (t.date for t in sorted(scheme.transactions, key=lambda x: x.date)
          if t.units and t.units > 0),
