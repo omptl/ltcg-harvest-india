@@ -31,6 +31,7 @@ from .nav import load_nav_index
 from .parser import parse_cas
 from .report import render_plan, write_json_report, write_markdown_report
 from .stocks import load_stocks_adjustment
+from .timing import compute_advisory
 
 
 def cli(argv: list[str] | None = None) -> int:
@@ -164,13 +165,19 @@ def cli(argv: list[str] | None = None) -> int:
     )
     losses = find_loss_candidates(evaluations)
 
-    render_plan(plan, losses, console=console)
+    # Redemption-window advisory uses real wall-clock time in IST and the NAV
+    # snapshot date from the AMFI feed to tell the user whether to act now or
+    # rerun tomorrow against a fresher NAV.
+    advisory = compute_advisory(nav_index.snapshot_date)
+
+    render_plan(plan, losses, console=console, advisory=advisory)
 
     if not args.no_report:
         out = write_json_report(plan, losses)
         console.print(f"[dim]JSON report written to {out}[/]")
         md_out = write_markdown_report(plan, losses, stocks=stocks,
-                                       cli_already_realized=args.already_realized)
+                                       cli_already_realized=args.already_realized,
+                                       advisory=advisory)
         console.print(f"[dim]Markdown summary written to {md_out}[/]")
 
     return 0

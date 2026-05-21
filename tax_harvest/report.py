@@ -13,6 +13,7 @@ from rich.table import Table
 from .loss_harvest import LossCandidate
 from .models import HarvestPlan
 from .stocks import StocksAdjustment
+from .timing import RedemptionAdvisory, compute_advisory
 
 DEFAULT_REPORT_DIR = Path("reports")  # cwd-relative; gitignored at repo root
 
@@ -25,8 +26,16 @@ DISCLAIMER = (
 
 
 def render_plan(plan: HarvestPlan, loss_candidates: list[LossCandidate],
-                console: Console | None = None) -> None:
+                console: Console | None = None,
+                advisory: RedemptionAdvisory | None = None) -> None:
     console = console or Console()
+
+    if advisory and plan.lines:
+        # Show the redemption-window advisory FIRST so the user sees it before
+        # the action table. Color the border by status.
+        color = "green" if advisory.status == "GREEN" else "yellow"
+        body = advisory.headline + "\n\n" + "\n".join(f"• {d}" for d in advisory.details)
+        console.print(Panel(body, title="Redemption window", border_style=color))
 
     header = Table.grid(expand=True)
     header.add_column(justify="left")
@@ -152,7 +161,8 @@ def render_plan(plan: HarvestPlan, loss_candidates: list[LossCandidate],
 def write_markdown_report(plan: HarvestPlan, loss_candidates: list[LossCandidate],
                           report_dir: Path = DEFAULT_REPORT_DIR,
                           stocks: StocksAdjustment | None = None,
-                          cli_already_realized: float | None = None) -> Path:
+                          cli_already_realized: float | None = None,
+                          advisory: RedemptionAdvisory | None = None) -> Path:
     """Write a one-page Markdown summary that a non-developer can act on.
 
     The JSON report carries the full state for programmatic use; this Markdown
@@ -170,7 +180,8 @@ def write_markdown_report(plan: HarvestPlan, loss_candidates: list[LossCandidate
     out_path = report_dir / f"harvest_summary_{plan.fy_label}_{ts}.md"
     out_path.write_text(
         _render_markdown(plan, loss_candidates, stocks=stocks,
-                         cli_already_realized=cli_already_realized),
+                         cli_already_realized=cli_already_realized,
+                         advisory=advisory),
         encoding="utf-8",
     )
     return out_path
@@ -178,13 +189,27 @@ def write_markdown_report(plan: HarvestPlan, loss_candidates: list[LossCandidate
 
 def _render_markdown(plan: HarvestPlan, loss_candidates: list[LossCandidate],
                      stocks: StocksAdjustment | None = None,
-                     cli_already_realized: float | None = None) -> str:
+                     cli_already_realized: float | None = None,
+                     advisory: RedemptionAdvisory | None = None) -> str:
     lines: list[str] = []
     lines.append(f"# LTCG Harvest Plan — FY {plan.fy_label}")
     lines.append("")
     lines.append(f"_Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} — "
                  "personal analysis only, verify with a CA before transacting._")
     lines.append("")
+
+    # --- Redemption window (timing advisory) --------------------------------
+    # Surfaced first because it changes whether the user should act now or
+    # tomorrow, before they even look at the action table below.
+    if advisory:
+        emoji = "🟢" if advisory.status == "GREEN" else "🟡"
+        lines.append(f"## {emoji} Redemption window — when to place the order")
+        lines.append("")
+        lines.append(f"**{advisory.headline}**")
+        lines.append("")
+        for d in advisory.details:
+            lines.append(f"- {d}")
+        lines.append("")
 
     # --- Budget block --------------------------------------------------------
     lines.append("## Budget")
