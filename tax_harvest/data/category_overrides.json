@@ -1,0 +1,11 @@
+{
+  "_schema": "Map of ISIN -> SchemeCategory enum value. Wins over name-heuristic classifier.",
+  "_categories": [
+    "equity", "elss", "equity_hybrid_aggressive", "arbitrage",
+    "debt_pre_apr_2023", "debt_post_apr_2023", "hybrid_conservative",
+    "international", "gold", "solution_oriented", "close_ended", "fmp"
+  ],
+  "_notes": "Add entries here for schemes the name-heuristic misclassifies. User-supplied overrides via --overrides merge on top of this file.",
+  "overrides": {
+  }
+}

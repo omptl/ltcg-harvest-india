@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tax-harvest"
+version = "0.1.0"
+description = "Personal LTCG harvesting tool for Indian mutual fund investors"
+requires-python = ">=3.11"
+dependencies = [
+    "casparser>=0.7.4",
+    "requests>=2.31",
+    "rich>=13.7",
+    "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+tax-harvest = "tax_harvest.main:cli"
+
+[tool.setuptools.packages.find]
+include = ["tax_harvest*"]
+exclude = ["tax_harvest.tests*"]
+
+[tool.setuptools.package-data]
+"tax_harvest.data" = ["*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tax_harvest/tests"]

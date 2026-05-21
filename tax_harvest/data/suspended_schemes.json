@@ -1,0 +1,6 @@
+{
+  "_schema": "ISIN -> human-readable note. These schemes are flagged as suspended/wound-up; the harvesting plan will exclude their lots with a clear message.",
+  "_notes": "Populate with ISINs of known wound-up schemes (e.g. the 6 Franklin India debt funds wound up in 2020). Left empty by default to avoid shipping inaccurate ISINs — the tool also detects missing AMFI NAVs as a secondary signal.",
+  "suspended": {
+  }
+}
