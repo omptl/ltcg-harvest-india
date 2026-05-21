@@ -24,5 +24,8 @@ tax-harvest = "tax_harvest.main:cli"
 include = ["tax_harvest*"]
 exclude = ["tax_harvest.tests*"]
 
+[tool.setuptools.package-data]
+"tax_harvest.data" = ["*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tax_harvest/tests"]

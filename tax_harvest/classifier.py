@@ -7,8 +7,12 @@ when in doubt we tag UNKNOWN and surface a warning rather than guess.
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import date
+from importlib.resources import files
+from pathlib import Path
+from typing import Optional
 
 from .models import Scheme, SchemeCategory
 
@@ -71,11 +75,17 @@ _PATTERNS: list[tuple[re.Pattern[str], SchemeCategory]] = [
 _CLOSE_ENDED_PATTERN = re.compile(r"\bseries\s*[-\s]?\d+|\bclose\s*ended\b")
 
 
-def classify_scheme(scheme: Scheme) -> SchemeCategory:
+def classify_scheme(scheme: Scheme,
+                    overrides: Optional[dict[str, SchemeCategory]] = None) -> SchemeCategory:
     """Determine the SchemeCategory for a scheme.
 
-    Returns UNKNOWN if no pattern matches; callers should surface this to the user.
+    `overrides` (keyed by ISIN) wins over name heuristics — used to correct
+    schemes the regexes misclassify. Returns UNKNOWN if no pattern matches;
+    callers should surface this to the user.
     """
+    if overrides and scheme.isin and scheme.isin in overrides:
+        return overrides[scheme.isin]
+
     name = scheme.scheme_name.lower()
 
     if _CLOSE_ENDED_PATTERN.search(name):
@@ -91,6 +101,69 @@ def classify_scheme(scheme: Scheme) -> SchemeCategory:
             return cat
 
     return SchemeCategory.UNKNOWN
+
+
+def load_overrides(extra_file: Optional[Path] = None) -> dict[str, SchemeCategory]:
+    """Load ISIN -> SchemeCategory overrides.
+
+    The packaged `data/category_overrides.json` is always loaded; an optional
+    user file is merged on top (user wins on conflicts).
+    """
+    out: dict[str, SchemeCategory] = {}
+
+    try:
+        packaged = files("tax_harvest.data").joinpath("category_overrides.json")
+        raw = json.loads(packaged.read_text())
+        out.update(_parse_override_dict(raw.get("overrides", {})))
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+
+    if extra_file is not None:
+        path = Path(extra_file)
+        if not path.exists():
+            raise FileNotFoundError(f"Overrides file not found: {path}")
+        raw = json.loads(path.read_text())
+        # Accept either {"overrides": {...}} or just the bare dict.
+        if "overrides" in raw and isinstance(raw["overrides"], dict):
+            out.update(_parse_override_dict(raw["overrides"]))
+        else:
+            out.update(_parse_override_dict(raw))
+
+    return out
+
+
+def _parse_override_dict(d: dict) -> dict[str, SchemeCategory]:
+    """Validate and coerce {ISIN: category-string} into {ISIN: SchemeCategory}."""
+    valid = {c.value for c in SchemeCategory}
+    out: dict[str, SchemeCategory] = {}
+    for isin, cat_str in d.items():
+        if not isinstance(cat_str, str) or cat_str not in valid:
+            raise ValueError(
+                f"Invalid category '{cat_str}' for ISIN {isin}. "
+                f"Allowed: {sorted(valid)}"
+            )
+        out[isin] = SchemeCategory(cat_str)
+    return out
+
+
+def load_suspended_isins(extra_file: Optional[Path] = None) -> dict[str, str]:
+    """Return ISIN -> note for known suspended/wound-up schemes."""
+    out: dict[str, str] = {}
+    try:
+        packaged = files("tax_harvest.data").joinpath("suspended_schemes.json")
+        raw = json.loads(packaged.read_text())
+        out.update(raw.get("suspended", {}) or {})
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+
+    if extra_file is not None:
+        path = Path(extra_file)
+        if not path.exists():
+            raise FileNotFoundError(f"Suspended-schemes file not found: {path}")
+        raw = json.loads(path.read_text())
+        out.update(raw.get("suspended", raw) or {})
+
+    return out
 
 
 def refine_debt_category(scheme: Scheme, first_purchase_date: date | None) -> SchemeCategory:

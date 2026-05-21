@@ -78,6 +78,26 @@ def render_plan(plan: HarvestPlan, loss_candidates: list[LossCandidate],
             "\n".join(f"• {w}" for w in plan.warnings),
             title="Warnings", border_style="yellow"))
 
+    if plan.grandfathered_lots:
+        gt = Table(title="Sec 112A Grandfathering Applied (pre-2018 equity lots)",
+                   show_lines=False, expand=True)
+        gt.add_column("Scheme", overflow="fold")
+        gt.add_column("Purchase", justify="right")
+        gt.add_column("Units", justify="right")
+        gt.add_column("Actual cost/u", justify="right")
+        gt.add_column("Effective cost/u", justify="right")
+        gt.add_column("Note", overflow="fold")
+        for ev in plan.grandfathered_lots:
+            gt.add_row(
+                ev.scheme.scheme_name,
+                ev.lot.purchase_date.isoformat(),
+                f"{ev.lot.units_remaining:,.4f}",
+                f"₹{ev.lot.cost_per_unit:,.4f}",
+                f"₹{(ev.effective_cost_per_unit or ev.lot.cost_per_unit):,.4f}",
+                ev.grandfathering_note or "",
+            )
+        console.print(gt)
+
     if loss_candidates:
         lt = Table(title="Loss-Harvesting Candidates (review separately)",
                    show_lines=False, expand=True)

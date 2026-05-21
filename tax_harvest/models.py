@@ -96,6 +96,7 @@ class Scheme(BaseModel):
     scheme_code: Optional[str] = None  # AMFI code if known
     category: SchemeCategory = SchemeCategory.UNKNOWN
     is_demat: bool = False
+    is_suspended: bool = False  # known wound-up / suspended scheme
     transactions: list[Transaction] = Field(default_factory=list)
 
     @property
@@ -123,7 +124,7 @@ class LotEvaluation(BaseModel):
     scheme: Scheme
     lot: Lot
     current_nav: float
-    unrealized_gain: float  # for units_remaining
+    unrealized_gain: float  # for units_remaining (uses effective_cost_per_unit if set)
     gain_per_unit: float
     holding_days: int
     is_ltcg_eligible: bool
@@ -132,6 +133,12 @@ class LotEvaluation(BaseModel):
     has_exit_load: bool = False
     exit_load_reason: Optional[str] = None
     excluded_reason: Optional[str] = None  # set if lot can't be harvested
+    # Grandfathering (Sec 112A): for equity lots acquired on/before 31-Jan-2018,
+    # effective cost = max(actual, min(FMV_31_Jan_2018, sale_NAV)). If applied,
+    # effective_cost_per_unit overrides lot.cost_per_unit for gain calculation.
+    grandfathered: bool = False
+    effective_cost_per_unit: Optional[float] = None
+    grandfathering_note: Optional[str] = None
 
     @property
     def is_harvestable(self) -> bool:
@@ -165,6 +172,7 @@ class HarvestPlan(BaseModel):
     budget_remaining: float = 0.0
     excluded_lots: list[LotEvaluation] = Field(default_factory=list)
     loss_candidates: list[LotEvaluation] = Field(default_factory=list)
+    grandfathered_lots: list[LotEvaluation] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -175,6 +183,7 @@ class CASData(BaseModel):
     pan_masked: str = ""
     email_masked: str = ""
     is_nri: bool = False
+    has_joint_holdings: bool = False
     schemes: list[Scheme] = Field(default_factory=list)
     statement_period_from: Optional[date] = None
     statement_period_to: Optional[date] = None
