@@ -48,6 +48,7 @@ tax-harvest cas.pdf \
 | `--equity-exit-load-days N` | 365 | Days under which equity exit load is assumed |
 | `--no-grandfathering` | off | Skip Sec 112A pre-2018 cost uplift |
 | `--refresh-fmv` | off | Re-fetch the 31-Jan-2018 FMV snapshot |
+| `--safety-buffer-pct N` | 0 | Shave N% off the budget before planning — absorbs NAV swing between plan and execution (Indian MFs are end-of-day priced). Typical 1.0–2.0. |
 | `--stocks-ltcg AMT` | none | Flat stocks LTCG (₹, positive) booked this FY |
 | `--stocks-ltcl AMT` | none | Flat stocks LTCL (₹, positive number for losses) — nets off LTCG; can expand budget |
 | `--stocks-ledger FILE` | none | Per-trade CSV of stock sells — see "Stocks vs MF" section |

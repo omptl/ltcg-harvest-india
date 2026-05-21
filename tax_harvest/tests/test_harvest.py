@@ -117,6 +117,39 @@ def test_aggregates_multiple_lots_of_same_scheme_into_one_line():
     assert len(lines_for_scheme[0].purchase_dates) >= 1
 
 
+def test_markdown_report_renders_safety_buffer_row(tmp_path):
+    """When a safety buffer is applied, the Budget table must surface it as a
+    distinct row and the rationale blockquote must explain the trade-off."""
+    from tax_harvest.report import write_markdown_report
+
+    s = _scheme("BUF", [_txn(OLD, TxnType.PURCHASE, 100, 100)])
+    evals = _evals([s], {"ISIN-BUF": 1500.0})
+    plan = build_plan(evals, fy_label="2026-27")
+
+    out = write_markdown_report(plan, loss_candidates=[], report_dir=tmp_path,
+                                 safety_buffer_pct=1.5,
+                                 safety_buffer_amount=1875.0)
+    body = out.read_text(encoding="utf-8")
+    assert "Safety buffer @ 1.50%" in body
+    assert "₹1,875.00" in body
+    assert "no-overshoot" in body or "Indian MFs are end-of-day priced" in body
+
+
+def test_markdown_report_omits_buffer_row_when_pct_zero(tmp_path):
+    """Default path (no buffer) must not render the row to avoid noise."""
+    from tax_harvest.report import write_markdown_report
+
+    s = _scheme("NOBUF", [_txn(OLD, TxnType.PURCHASE, 100, 100)])
+    evals = _evals([s], {"ISIN-NOBUF": 1500.0})
+    plan = build_plan(evals, fy_label="2026-27")
+
+    out = write_markdown_report(plan, loss_candidates=[], report_dir=tmp_path,
+                                 safety_buffer_pct=0.0,
+                                 safety_buffer_amount=0.0)
+    body = out.read_text(encoding="utf-8")
+    assert "Safety buffer" not in body
+
+
 def test_markdown_report_renders_plan_action_block(tmp_path):
     """Markdown summary must call out the schemes to sell, units, and total LTCG."""
     from tax_harvest.report import write_markdown_report

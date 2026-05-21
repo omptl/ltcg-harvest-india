@@ -156,6 +156,25 @@ def cli(argv: list[str] | None = None) -> int:
         for src in stocks.sources:
             warnings.append(f"  source — {src}")
 
+    # Safety buffer — shave N% off the budget BEFORE harvesting so an adverse
+    # NAV move between plan time (yesterday's NAV) and execution time (today's
+    # closing NAV, declared tonight) cannot push booked LTCG over ₹1.25L. Indian
+    # MFs are end-of-day priced; this buffer is the only single-pass way to
+    # guarantee no overshoot.
+    buffer_pct = max(0.0, min(args.safety_buffer_pct or 0.0, 10.0))  # clamp 0..10
+    buffer_amount = 0.0
+    if buffer_pct > 0:
+        # Compute base budget the buffer applies to, then shrink.
+        base_budget = (125000.0
+                       - effective_already_realized
+                       + effective_carry_forward)
+        buffer_amount = max(0.0, base_budget * buffer_pct / 100.0)
+        effective_already_realized += buffer_amount
+        warnings.append(
+            f"Safety buffer {buffer_pct:.2f}% applied → ₹{buffer_amount:,.2f} of "
+            f"headroom held back to absorb adverse NAV move between plan and execution"
+        )
+
     plan = build_plan(
         evaluations,
         fy_label=fy_label,
@@ -177,7 +196,9 @@ def cli(argv: list[str] | None = None) -> int:
         console.print(f"[dim]JSON report written to {out}[/]")
         md_out = write_markdown_report(plan, losses, stocks=stocks,
                                        cli_already_realized=args.already_realized,
-                                       advisory=advisory)
+                                       advisory=advisory,
+                                       safety_buffer_pct=buffer_pct,
+                                       safety_buffer_amount=buffer_amount)
         console.print(f"[dim]Markdown summary written to {md_out}[/]")
 
     return 0
@@ -219,6 +240,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
                    help="Flat stocks LTCL (Rs, positive number for losses) already booked "
                         "this FY. Sets off against current-FY LTCG before the exemption, "
                         "so a loss-heavy stocks year can EXPAND the MF harvest budget.")
+    p.add_argument("--safety-buffer-pct", type=float, default=0.0,
+                   help="Shave N percent off the harvest budget before planning so an "
+                        "adverse NAV move between plan time and execution time (Indian "
+                        "MFs are end-of-day priced) cannot overshoot the ₹1.25L exemption. "
+                        "Typical: 1.0–2.0. Default 0 (no shave).")
     p.add_argument("--stocks-ledger", type=Path, default=None,
                    help="Path to a CSV file of stock sells. Columns: isin, symbol, "
                         "buy_date, sell_date, quantity, buy_value, sell_value. Tool "

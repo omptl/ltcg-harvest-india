@@ -162,7 +162,9 @@ def write_markdown_report(plan: HarvestPlan, loss_candidates: list[LossCandidate
                           report_dir: Path = DEFAULT_REPORT_DIR,
                           stocks: StocksAdjustment | None = None,
                           cli_already_realized: float | None = None,
-                          advisory: RedemptionAdvisory | None = None) -> Path:
+                          advisory: RedemptionAdvisory | None = None,
+                          safety_buffer_pct: float = 0.0,
+                          safety_buffer_amount: float = 0.0) -> Path:
     """Write a one-page Markdown summary that a non-developer can act on.
 
     The JSON report carries the full state for programmatic use; this Markdown
@@ -181,7 +183,9 @@ def write_markdown_report(plan: HarvestPlan, loss_candidates: list[LossCandidate
     out_path.write_text(
         _render_markdown(plan, loss_candidates, stocks=stocks,
                          cli_already_realized=cli_already_realized,
-                         advisory=advisory),
+                         advisory=advisory,
+                         safety_buffer_pct=safety_buffer_pct,
+                         safety_buffer_amount=safety_buffer_amount),
         encoding="utf-8",
     )
     return out_path
@@ -190,7 +194,9 @@ def write_markdown_report(plan: HarvestPlan, loss_candidates: list[LossCandidate
 def _render_markdown(plan: HarvestPlan, loss_candidates: list[LossCandidate],
                      stocks: StocksAdjustment | None = None,
                      cli_already_realized: float | None = None,
-                     advisory: RedemptionAdvisory | None = None) -> str:
+                     advisory: RedemptionAdvisory | None = None,
+                     safety_buffer_pct: float = 0.0,
+                     safety_buffer_amount: float = 0.0) -> str:
     lines: list[str] = []
     lines.append(f"# LTCG Harvest Plan — FY {plan.fy_label}")
     lines.append("")
@@ -232,8 +238,24 @@ def _render_markdown(plan: HarvestPlan, loss_candidates: list[LossCandidate],
     else:
         lines.append(f"| Already realised LTCG this FY (subtracted) | ₹{plan.already_realized_ltcg:,.2f} |")
     lines.append(f"| Carry-forward LTCL from prior FYs (added) | ₹{plan.carry_forward_losses:,.2f} |")
+    if safety_buffer_amount > 0:
+        lines.append(
+            f"| Safety buffer @ {safety_buffer_pct:.2f}% (held back, no-overshoot guarantee) "
+            f"| −₹{safety_buffer_amount:,.2f} |"
+        )
     lines.append(f"| **Effective budget for this plan** | **₹{plan.effective_budget:,.2f}** |")
     lines.append("")
+    if safety_buffer_amount > 0:
+        lines.append(
+            f"> **Safety buffer rationale**: Indian MFs are end-of-day priced; your "
+            f"redemption transacts at a closing NAV that's not yet known. Holding "
+            f"₹{safety_buffer_amount:,.2f} (~{safety_buffer_pct:.2f}% of base headroom) "
+            f"back absorbs a typical mid-cap intraday move and guarantees the booked "
+            f"LTCG stays under ₹1.25 L even if NAV ticks up between plan time and "
+            f"execution. Trade-off: this much exemption goes unused unless you do a "
+            f"top-up redemption tomorrow against the now-known NAV."
+        )
+        lines.append("")
     lines.append("> The ₹1.25 L Sec 112A exemption is **shared across listed equity shares, "
                  "equity mutual fund units, and equity business-trust units**. If you also "
                  "book stock LTCG this FY, pass `--stocks-ltcg <amount>` (or a CSV via "
