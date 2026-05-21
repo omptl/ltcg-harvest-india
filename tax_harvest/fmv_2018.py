@@ -25,7 +25,8 @@ FMV_URL = (
     "https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx"
     "?frmdt=31-Jan-2018&todt=31-Jan-2018"
 )
-DEFAULT_CACHE_DIR = Path.home() / ".tax_harvest"
+# cwd-relative — keeps the project self-contained; gitignored at repo root.
+DEFAULT_CACHE_DIR = Path("cache")
 DEFAULT_CACHE_FILE = DEFAULT_CACHE_DIR / "fmv_jan_2018.txt"
 
 
@@ -77,7 +78,7 @@ def load_fmv_index(cache_file: Path = DEFAULT_CACHE_FILE,
             resp = requests.get(FMV_URL, timeout=timeout)
             resp.raise_for_status()
             if resp.text.strip():
-                cache_file.write_text(resp.text)
+                cache_file.write_text(resp.text, encoding="utf-8")
         except requests.RequestException:
             # Fall through — return an empty index if no cache.
             pass
@@ -85,8 +86,8 @@ def load_fmv_index(cache_file: Path = DEFAULT_CACHE_FILE,
     if not cache_file.exists():
         return Fmv2018Index(NavIndex())
 
-    text = cache_file.read_text()
-    return Fmv2018Index(NavIndex.from_text(text))
+    text = cache_file.read_text(encoding="utf-8")
+    return Fmv2018Index(NavIndex.from_historical_text(text))
 
 
 def compute_grandfathered_cost(actual_cost_per_unit: float,

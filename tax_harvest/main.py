@@ -117,6 +117,12 @@ def cli(argv: list[str] | None = None) -> int:
         for name in sorted(set(fmv_index.unmatched)):
             warnings.append(f"31-Jan-2018 FMV not matched (pre-2018 equity lot): {name}")
 
+    # Dedupe while preserving first-seen order. The per-scheme loop above emits the
+    # same warning string once per folio holding the scheme — collapse to a single
+    # line so the warnings panel stays readable.
+    seen: set[str] = set()
+    warnings = [w for w in warnings if not (w in seen or seen.add(w))]
+
     plan = build_plan(
         evaluations,
         fy_label=fy_label,

@@ -13,7 +13,7 @@ from rich.table import Table
 from .loss_harvest import LossCandidate
 from .models import HarvestPlan
 
-DEFAULT_REPORT_DIR = Path.home() / ".tax_harvest" / "reports"
+DEFAULT_REPORT_DIR = Path("reports")  # cwd-relative; gitignored at repo root
 
 DISCLAIMER = (
     "[bold yellow]Disclaimer:[/] for personal analysis only. Verify with a CA before "
@@ -154,8 +154,19 @@ def write_json_report(plan: HarvestPlan, loss_candidates: list[LossCandidate],
     report_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = report_dir / f"harvest_plan_{plan.fy_label}_{ts}.json"
+    plan_dump = plan.model_dump(mode="json")
+    # Strip the embedded scheme.transactions from each LotEvaluation in the
+    # excluded_lots / loss_candidates / grandfathered_lots lists. The full
+    # transaction history is already available via the source CAS and replaying
+    # the entire SIP chain inside every excluded lot blows the report up to
+    # 100MB+ on a heavily-SIP'd portfolio.
+    for key in ("excluded_lots", "loss_candidates", "grandfathered_lots"):
+        for ev in plan_dump.get(key, []) or []:
+            scheme = ev.get("scheme")
+            if isinstance(scheme, dict):
+                scheme.pop("transactions", None)
     payload = {
-        "plan": plan.model_dump(mode="json"),
+        "plan": plan_dump,
         "loss_candidates": [
             {
                 "loss_type": c.loss_type,
@@ -171,5 +182,5 @@ def write_json_report(plan: HarvestPlan, loss_candidates: list[LossCandidate],
             for c in loss_candidates
         ],
     }
-    out_path.write_text(json.dumps(payload, indent=2, default=str))
+    out_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
     return out_path

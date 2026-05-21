@@ -115,3 +115,21 @@ def test_aggregates_multiple_lots_of_same_scheme_into_one_line():
     lines_for_scheme = [l for l in plan.lines if l.scheme_name == "MULTI"]
     assert len(lines_for_scheme) == 1
     assert len(lines_for_scheme[0].purchase_dates) >= 1
+
+
+def test_json_report_does_not_embed_full_transaction_history_per_lot(tmp_path):
+    """Regression: each excluded_lot used to re-embed the full Scheme including
+    every transaction, blowing up the JSON to 100+MB on SIP-heavy portfolios."""
+    from tax_harvest.report import write_json_report
+
+    sip_dates = [OLD - timedelta(days=30 * i) for i in range(200)]
+    s = _scheme("SIPPY", [_txn(d, TxnType.SIP, 1.0, 100.0) for d in sip_dates])
+    evals = _evals([s], {"ISIN-SIPPY": 50.0})  # underwater → excluded as loss
+    plan = build_plan(evals, fy_label="2026-27")
+
+    out = write_json_report(plan, loss_candidates=[], report_dir=tmp_path)
+    import json
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    for ev in payload["plan"]["excluded_lots"]:
+        assert "transactions" not in ev["scheme"], \
+            "Scheme.transactions must be stripped from per-lot dumps to keep reports small"

@@ -20,7 +20,8 @@ import requests
 from .models import Scheme
 
 AMFI_URL = "https://www.amfiindia.com/spages/NAVAll.txt"
-DEFAULT_CACHE_DIR = Path.home() / ".tax_harvest"
+# cwd-relative — keeps the project self-contained; gitignored at repo root.
+DEFAULT_CACHE_DIR = Path("cache")
 DEFAULT_CACHE_FILE = DEFAULT_CACHE_DIR / "nav_cache.txt"
 CACHE_MAX_AGE_SEC = 24 * 60 * 60
 
@@ -35,17 +36,40 @@ class NavIndex:
         self.snapshot_date: Optional[str] = None
         self.unmatched: list[str] = []  # populated by callers
 
+    # Column layouts of the two AMFI feeds we consume. Indexes are positional
+    # offsets into a `;`-split row. The daily NAVAll.txt feed places the scheme
+    # name AFTER the two ISINs; the historical DownloadNAVHistoryReport feed
+    # places the name BEFORE the ISINs and adds Repurchase + Sale columns.
+    _LAYOUT_DAILY = {"code": 0, "isin_g": 1, "isin_r": 2, "name": 3, "nav": 4, "date": 5, "min_cols": 6}
+    _LAYOUT_HISTORICAL = {"code": 0, "name": 1, "isin_g": 2, "isin_r": 3, "nav": 4, "date": 7, "min_cols": 8}
+
     @classmethod
     def from_text(cls, text: str) -> "NavIndex":
+        """Parse the daily NAVAll.txt feed (6-column layout)."""
+        return cls._parse(text, cls._LAYOUT_DAILY)
+
+    @classmethod
+    def from_historical_text(cls, text: str) -> "NavIndex":
+        """Parse the DownloadNAVHistoryReport feed (8-column layout with Repurchase + Sale)."""
+        return cls._parse(text, cls._LAYOUT_HISTORICAL)
+
+    @classmethod
+    def _parse(cls, text: str, layout: dict[str, int]) -> "NavIndex":
         idx = cls()
+        date_counts: dict[str, int] = {}
         for line in text.splitlines():
             line = line.strip()
             if not line or ";" not in line:
                 continue
-            parts = line.split(";")
-            if len(parts) < 6 or not parts[0].strip().isdigit():
+            parts = [p.strip() for p in line.split(";")]
+            if len(parts) < layout["min_cols"] or not parts[layout["code"]].isdigit():
                 continue
-            code, isin_g, isin_r, name, nav_str, date_str = (p.strip() for p in parts[:6])
+            code = parts[layout["code"]]
+            isin_g = parts[layout["isin_g"]]
+            isin_r = parts[layout["isin_r"]]
+            name = parts[layout["name"]]
+            nav_str = parts[layout["nav"]]
+            date_str = parts[layout["date"]]
             try:
                 nav = float(nav_str)
             except ValueError:
@@ -57,7 +81,12 @@ class NavIndex:
                 if isin and isin != "-":
                     idx.by_isin[isin] = nav
             idx.by_name[_normalize(name)] = nav
-            idx.snapshot_date = date_str
+            date_counts[date_str] = date_counts.get(date_str, 0) + 1
+        # Snapshot date = most common date across all rows. The AMFI feed mixes in
+        # stale dates from interval / FMP / wound-up schemes; using the last-seen
+        # date misreports the freshness of the actively-traded universe.
+        if date_counts:
+            idx.snapshot_date = max(date_counts.items(), key=lambda kv: kv[1])[0]
         return idx
 
     def lookup(self, scheme: Scheme) -> Optional[float]:
@@ -93,16 +122,22 @@ def load_nav_index(cache_file: Path = DEFAULT_CACHE_FILE,
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     needs_fetch = force_refresh or not cache_file.exists()
     if not needs_fetch:
-        age = time.time() - cache_file.stat().st_mtime
-        needs_fetch = age > max_age_sec
+        # Treat a zero-byte cache as stale — happens if a prior run crashed mid-write
+        # (e.g. encoding error) and left an empty file behind. Without this, every
+        # subsequent run within the 24h window silently returns zero NAVs.
+        if cache_file.stat().st_size == 0:
+            needs_fetch = True
+        else:
+            age = time.time() - cache_file.stat().st_mtime
+            needs_fetch = age > max_age_sec
     if needs_fetch:
         try:
             resp = requests.get(AMFI_URL, timeout=timeout)
             resp.raise_for_status()
-            cache_file.write_text(resp.text)
+            cache_file.write_text(resp.text, encoding="utf-8")
         except requests.RequestException as exc:
             if not cache_file.exists():
                 raise RuntimeError(f"AMFI NAV fetch failed and no cache present: {exc}") from exc
             # Use stale cache, but warn caller via the snapshot_date.
-    text = cache_file.read_text()
+    text = cache_file.read_text(encoding="utf-8")
     return NavIndex.from_text(text)

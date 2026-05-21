@@ -49,9 +49,12 @@ tax-harvest cas.pdf \
 | `--no-grandfathering` | off | Skip Sec 112A pre-2018 cost uplift |
 | `--refresh-fmv` | off | Re-fetch the 31-Jan-2018 FMV snapshot |
 
-JSON reports are written under `~/.tax_harvest/reports/`. The AMFI NAV cache
-lives at `~/.tax_harvest/nav_cache.txt` (refreshed every 24h). The Sec 112A
-31-Jan-2018 FMV snapshot is cached permanently at `~/.tax_harvest/fmv_jan_2018.txt`.
+JSON reports are written under `./reports/` (relative to the directory you run
+`tax-harvest` from — gitignored at the repo root). The AMFI NAV cache
+lives at `./cache/nav_cache.txt` (refreshed every 24h). The Sec 112A
+31-Jan-2018 FMV snapshot is cached permanently at `./cache/fmv_jan_2018.txt`.
+Both paths are relative to the directory you run `tax-harvest` from and are
+gitignored at the repo root.
 
 ## What it does
 

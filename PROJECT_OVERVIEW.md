@@ -119,7 +119,7 @@ tax_harvest/
 | `fmv_2018.py` | Pull the 31-Jan-2018 historical snapshot from AMFI's DownloadNAVHistoryReport endpoint; cache permanently; implement `max(actual, min(FMV, sale_NAV))` |
 | `harvest.py` | Sort harvestable lots by gain-per-unit desc; accumulate until effective budget filled; truncate marginal lot to 4-decimal units to land on budget exactly; aggregate multi-lot scheme touches into one redemption line |
 | `loss_harvest.py` | Filter non-positive gains; tag STCL (≤365d for equity / always for Sec 50AA debt) vs LTCL |
-| `report.py` | Render Rich-formatted console panels & tables (redemption plan, warnings, grandfathered lots, loss candidates, excluded lots); write timestamped JSON to `~/.tax_harvest/reports/` |
+| `report.py` | Render Rich-formatted console panels & tables (redemption plan, warnings, grandfathered lots, loss candidates, excluded lots); write timestamped JSON to `./reports/` (cwd-relative, gitignored) |
 
 ---
 
@@ -217,8 +217,8 @@ common case; the override is there because no heuristic is 100%.
 
 - AMFI daily NAV: 24h cache (NAV moves daily).
 - AMFI 31-Jan-2018 snapshot: permanent cache (historical NAVs don't change).
-- All cached under `~/.tax_harvest/` so multiple runs in the same day cost zero
-  network calls.
+- All cached under `./cache/` (cwd-relative, gitignored) so multiple runs in the
+  same day cost zero network calls.
 
 ---
 
@@ -270,9 +270,9 @@ common case; the override is there because no heuristic is 100%.
 
 ### Files & directories
 
-- `~/.tax_harvest/nav_cache.txt` — daily AMFI NAV snapshot (24h TTL)
-- `~/.tax_harvest/fmv_jan_2018.txt` — 31-Jan-2018 NAV snapshot (permanent)
-- `~/.tax_harvest/reports/harvest_plan_<FY>_<timestamp>.json` — timestamped reports
+- `./cache/nav_cache.txt` — daily AMFI NAV snapshot (24h TTL)
+- `./cache/fmv_jan_2018.txt` — 31-Jan-2018 NAV snapshot (permanent)
+- `./reports/harvest_plan_<FY>_<timestamp>.json` — timestamped reports (cwd-relative, gitignored)
 - `tax_harvest/data/category_overrides.json` — packaged classifier overrides
 - `tax_harvest/data/suspended_schemes.json` — packaged suspended list
 
@@ -344,7 +344,7 @@ These were explicit non-goals in the original spec and have not been built:
   on your AMC's portal or via your broker.
 - No tax-filing integration — output is informational only.
 - No PII storage or upload. The CAS PDF, password, and all derived data stay on
-  local disk under `~/.tax_harvest/`.
+  local disk under `./cache/` and `./reports/` (both gitignored).
 - No surcharge / cess / TDS computation. The 12.5% headline rate above ₹1.25L
   is not modelled because harvesting *up to* the exemption produces zero tax.
 - No grandfathering for listed equity shares held directly (the tool is

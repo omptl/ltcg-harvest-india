@@ -99,6 +99,12 @@ def parse_cas(pdf_path: str | Path, password: str,
     except Exception as exc:  # casparser raises various exception types
         raise RuntimeError(f"Could not parse CAS PDF (password correct?): {exc}") from exc
 
+    # casparser >=0.8 returns a Pydantic CASData model regardless of output=. Normalize
+    # to a plain dict so the downstream walk (which uses .get / nested-dict access)
+    # keeps working without conditional branches.
+    if hasattr(raw, "model_dump"):
+        raw = raw.model_dump(mode="python")
+
     suspended_isins = suspended_isins if suspended_isins is not None else load_suspended_isins()
     return _from_casparser_dict(raw, overrides=overrides, suspended_isins=suspended_isins)
 
