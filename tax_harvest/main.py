@@ -29,7 +29,8 @@ from .loss_harvest import find_loss_candidates
 from .models import SchemeCategory
 from .nav import load_nav_index
 from .parser import parse_cas
-from .report import render_plan, write_json_report
+from .report import render_plan, write_json_report, write_markdown_report
+from .stocks import load_stocks_adjustment
 
 
 def cli(argv: list[str] | None = None) -> int:
@@ -48,6 +49,16 @@ def cli(argv: list[str] | None = None) -> int:
         suspended = load_suspended_isins(extra_file=args.suspended)
     except FileNotFoundError as exc:
         console.print(f"[red]Suspended-schemes file error:[/] {exc}")
+        return 2
+
+    try:
+        stocks = load_stocks_adjustment(
+            flat_ltcg=args.stocks_ltcg,
+            ledger_path=args.stocks_ledger,
+            fy_label=fy_label,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Stocks ledger error:[/] {exc}")
         return 2
 
     password = args.password or getpass.getpass("CAS PDF password: ")
@@ -123,10 +134,23 @@ def cli(argv: list[str] | None = None) -> int:
     seen: set[str] = set()
     warnings = [w for w in warnings if not (w in seen or seen.add(w))]
 
+    # Stocks LTCG (if any provided) folds into the same Sec 112A bucket as MF LTCG.
+    # The ₹1.25 L exemption is aggregate across listed shares + equity MF + business
+    # trust units — see PROJECT_OVERVIEW §"Tax-rule cheat sheet". Surface the stock
+    # contribution explicitly in warnings so the user knows why the budget shrank.
+    effective_already_realized = args.already_realized + stocks.realized_ltcg
+    if stocks.realized_ltcg:
+        warnings.append(
+            f"Stocks LTCG accounted for: ₹{stocks.realized_ltcg:,.2f} (Sec 112A "
+            f"₹1.25L exemption is shared with listed equity)"
+        )
+        for src in stocks.sources:
+            warnings.append(f"  source — {src}")
+
     plan = build_plan(
         evaluations,
         fy_label=fy_label,
-        already_realized_ltcg=args.already_realized,
+        already_realized_ltcg=effective_already_realized,
         carry_forward_losses=args.carry_forward_loss,
         warnings=warnings,
     )
@@ -137,6 +161,9 @@ def cli(argv: list[str] | None = None) -> int:
     if not args.no_report:
         out = write_json_report(plan, losses)
         console.print(f"[dim]JSON report written to {out}[/]")
+        md_out = write_markdown_report(plan, losses, stocks=stocks,
+                                       cli_already_realized=args.already_realized)
+        console.print(f"[dim]Markdown summary written to {md_out}[/]")
 
     return 0
 
@@ -169,6 +196,15 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
                    help="Path to JSON file listing additional suspended/wound-up ISINs.")
     p.add_argument("--equity-exit-load-days", type=int, default=365,
                    help="Days under which an equity lot is assumed to attract exit load.")
+    p.add_argument("--stocks-ltcg", type=float, default=None,
+                   help="Flat stocks LTCG (Rs) already booked this FY — paste the total "
+                        "from your broker's tax P&L. Adds to --already-realized so the "
+                        "MF plan shrinks (Sec 112A exemption is shared with stocks).")
+    p.add_argument("--stocks-ledger", type=Path, default=None,
+                   help="Path to a CSV file of stock sells. Columns: isin, symbol, "
+                        "buy_date, sell_date, quantity, buy_value, sell_value. Tool "
+                        "filters by FY (on sell_date), keeps only LTCG (>365d) with "
+                        "positive gain, sums them, folds into the budget.")
     p.add_argument("--no-grandfathering", action="store_true",
                    help="Skip Sec 112A grandfathering for pre-2018 equity lots.")
     p.add_argument("--refresh-fmv", action="store_true",

@@ -117,6 +117,27 @@ def test_aggregates_multiple_lots_of_same_scheme_into_one_line():
     assert len(lines_for_scheme[0].purchase_dates) >= 1
 
 
+def test_markdown_report_renders_plan_action_block(tmp_path):
+    """Markdown summary must call out the schemes to sell, units, and total LTCG."""
+    from tax_harvest.report import write_markdown_report
+
+    s = _scheme("HARVESTABLE", [_txn(OLD, TxnType.PURCHASE, 100, 100)])
+    evals = _evals([s], {"ISIN-HARVESTABLE": 1500.0})
+    plan = build_plan(evals, fy_label="2026-27")
+
+    out = write_markdown_report(plan, loss_candidates=[], report_dir=tmp_path)
+    assert out.exists() and out.suffix == ".md"
+    body = out.read_text(encoding="utf-8")
+    assert "FY 2026-27" in body
+    assert "HARVESTABLE" in body
+    assert "Total LTCG booked" in body
+    # Cross-asset disclosure is load-bearing — without it users miss that stock
+    # LTCG eats into the same ₹1.25 L bucket. Pin it so a future refactor can't
+    # silently drop the warning.
+    assert "listed equity shares" in body
+    assert "--stocks-ltcg" in body
+
+
 def test_json_report_does_not_embed_full_transaction_history_per_lot(tmp_path):
     """Regression: each excluded_lot used to re-embed the full Scheme including
     every transaction, blowing up the JSON to 100+MB on SIP-heavy portfolios."""

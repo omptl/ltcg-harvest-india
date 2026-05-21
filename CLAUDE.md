@@ -63,8 +63,9 @@ clean — do not reach across stages or duplicate logic.
 - `./cache/nav_cache.txt` — AMFI daily NAV, 24h TTL (`--no-cache` to bust).
 - `./cache/fmv_jan_2018.txt` — 31-Jan-2018 snapshot, permanent
   (`--refresh-fmv` to bust). Historical NAVs don't change.
-- `./reports/harvest_plan_<FY>_<timestamp>.json` — cwd-relative, gitignored
-  (`--no-report` to skip).
+- `./reports/harvest_plan_<FY>_<timestamp>.json` — full structured output, cwd-relative, gitignored.
+- `./reports/harvest_summary_<FY>_<timestamp>.md` — one-page human-readable summary written alongside.
+- Both controlled by `--no-report` (skips both).
 - `tax_harvest/data/{category_overrides,suspended_schemes}.json` — packaged data;
   user-supplied files via `--overrides` / `--suspended` merge on top.
 
@@ -73,6 +74,12 @@ clean — do not reach across stages or duplicate logic.
 Personal single-user CLI. No web UI, no server, no DB, no auth, no automated
 redemption, no tax-filing integration, no PII upload. Don't add any of these — they
 were explicit non-goals.
+
+**The ₹1.25 L Sec 112A exemption is shared with listed equity LTCG.** The tool
+only reads CAS (mutual funds + bonds), not direct equity demat holdings. If the
+user has also booked / will book stock LTCG this FY, they must pass that amount
+via `--already-realized` so the MF plan shrinks correspondingly. The Markdown
+summary surfaces this as a callout — keep it there.
 
 Tax rules reflect law as of build time (post-Budget-2024). When updating a rule,
 update both `classifier.py` / `lots.py` and the "Tax-rule cheat sheet" section of

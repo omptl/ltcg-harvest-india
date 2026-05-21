@@ -48,9 +48,18 @@ tax-harvest cas.pdf \
 | `--equity-exit-load-days N` | 365 | Days under which equity exit load is assumed |
 | `--no-grandfathering` | off | Skip Sec 112A pre-2018 cost uplift |
 | `--refresh-fmv` | off | Re-fetch the 31-Jan-2018 FMV snapshot |
+| `--stocks-ltcg AMT` | none | Flat stocks LTCG (₹) booked this FY — shrinks budget |
+| `--stocks-ledger FILE` | none | Per-trade CSV of stock sells — see "Stocks vs MF" section |
 
-JSON reports are written under `./reports/` (relative to the directory you run
-`tax-harvest` from — gitignored at the repo root). The AMFI NAV cache
+Two reports are written under `./reports/` (relative to the directory you run
+`tax-harvest` from — gitignored at the repo root):
+
+- `harvest_plan_<FY>_<timestamp>.json` — full structured output for tooling.
+- `harvest_summary_<FY>_<timestamp>.md` — one-page Markdown summary you can
+  open in any editor or GitHub viewer; this is the artifact a non-developer
+  should read.
+
+The AMFI NAV cache
 lives at `./cache/nav_cache.txt` (refreshed every 24h). The Sec 112A
 31-Jan-2018 FMV snapshot is cached permanently at `./cache/fmv_jan_2018.txt`.
 Both paths are relative to the directory you run `tax-harvest` from and are
@@ -81,11 +90,66 @@ gitignored at the repo root.
    lot to land exactly on budget.
 8. Surfaces a secondary table of loss-harvesting candidates (STCL vs LTCL).
 
+## Stocks vs mutual funds — the ₹1.25 L exemption is shared
+
+The Sec 112A ₹1,25,000 annual exemption is **aggregate** across:
+
+1. Listed equity shares (STT-paid on both buy + sell)
+2. Equity-oriented mutual fund units (STT-paid on redemption) — *what this tool sees*
+3. Equity business-trust units (REITs / InvITs)
+
+You do **not** get a separate ₹1.25 L for stocks and another ₹1.25 L for MFs.
+
+If you also book LTCG on direct equity this FY, fold that into the budget so
+the MF redemption plan shrinks to fit the remaining headroom. Two options:
+
+**Easy** — pass the LTCG total from your broker's tax P&L as a flat number:
+
+```
+tax-harvest cas.pdf --stocks-ltcg 40000
+```
+
+**Auditable** — pass a per-trade CSV; the tool filters by FY (on `sell_date`),
+keeps only LTCG-eligible rows (held > 365 days) with positive gain, sums them,
+and folds the result into the budget:
+
+```
+tax-harvest cas.pdf --stocks-ledger stocks.csv
+```
+
+The CSV must have these columns (header required, order flexible):
+
+| Column | Format | Notes |
+| --- | --- | --- |
+| `isin` | string | e.g. `INE002A01018`. Used for traceability. |
+| `symbol` | string | e.g. `TCS`. |
+| `buy_date` | date | `YYYY-MM-DD`, `DD-MM-YYYY`, `DD/MM/YYYY`, or `DD-Mon-YYYY`. |
+| `sell_date` | date | same formats. Leave blank for open positions (ignored). |
+| `quantity` | number | shares sold in this row. |
+| `buy_value` | ₹ | total acquisition cost for this lot. |
+| `sell_value` | ₹ | total proceeds for this lot. |
+
+Example minimal `stocks.csv`:
+
+```csv
+isin,symbol,buy_date,sell_date,quantity,buy_value,sell_value
+INE002A01018,TCS,2024-01-15,2026-04-22,10,32000,42000
+INE001A01036,RELIANCE,2023-06-01,2026-09-12,5,12000,15500
+```
+
+Both flags can be combined — they sum. The Markdown summary will break the
+budget down so you can audit where each rupee of shrinkage came from.
+
+This tool only sees mutual fund folios from your CAS — direct demat equity
+holdings are out of scope as a recommendation source (the tool never suggests
+stock buys or sells). The stocks input only affects the **budget**, not the plan.
+
 ## What it explicitly does not do
 
 - No web UI, no server, no database, no auth, no multi-user support.
 - No automated redemption execution.
 - No tax filing integration.
+- No coverage of direct equity shares (see note above — combine via `--already-realized`).
 - No PII storage or upload. The CAS PDF stays on your local disk.
 
 ## Caveats & manual checks
