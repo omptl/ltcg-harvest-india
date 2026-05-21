@@ -54,6 +54,7 @@ def cli(argv: list[str] | None = None) -> int:
     try:
         stocks = load_stocks_adjustment(
             flat_ltcg=args.stocks_ltcg,
+            flat_ltcl=args.stocks_ltcl,
             ledger_path=args.stocks_ledger,
             fy_label=fy_label,
         )
@@ -136,13 +137,20 @@ def cli(argv: list[str] | None = None) -> int:
 
     # Stocks LTCG (if any provided) folds into the same Sec 112A bucket as MF LTCG.
     # The ₹1.25 L exemption is aggregate across listed shares + equity MF + business
-    # trust units — see PROJECT_OVERVIEW §"Tax-rule cheat sheet". Surface the stock
-    # contribution explicitly in warnings so the user knows why the budget shrank.
-    effective_already_realized = args.already_realized + stocks.realized_ltcg
-    if stocks.realized_ltcg:
+    # trust units — see PROJECT_OVERVIEW §"Tax-rule cheat sheet".
+    #
+    # Per the same rule, current-FY LTCL is set off against current-FY LTCG BEFORE
+    # the exemption applies. So we use the NET figure: positive net shrinks the
+    # budget (already-realized); negative net (loss-heavy stock year) expands the
+    # budget (treat as bonus carry-forward equivalent since the loss can absorb
+    # this FY's MF harvest gains tax-free before the exemption is even touched).
+    stocks_net = stocks.net_ltcg
+    effective_already_realized = args.already_realized + max(0.0, stocks_net)
+    effective_carry_forward = args.carry_forward_loss + max(0.0, -stocks_net)
+    if not stocks.is_empty():
         warnings.append(
-            f"Stocks LTCG accounted for: ₹{stocks.realized_ltcg:,.2f} (Sec 112A "
-            f"₹1.25L exemption is shared with listed equity)"
+            f"Stocks LTCG ₹{stocks.realized_ltcg:,.2f} / LTCL ₹{stocks.realized_ltcl:,.2f} "
+            f"→ net ₹{stocks_net:,.2f} folded into the Sec 112A budget"
         )
         for src in stocks.sources:
             warnings.append(f"  source — {src}")
@@ -151,7 +159,7 @@ def cli(argv: list[str] | None = None) -> int:
         evaluations,
         fy_label=fy_label,
         already_realized_ltcg=effective_already_realized,
-        carry_forward_losses=args.carry_forward_loss,
+        carry_forward_losses=effective_carry_forward,
         warnings=warnings,
     )
     losses = find_loss_candidates(evaluations)
@@ -197,14 +205,19 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--equity-exit-load-days", type=int, default=365,
                    help="Days under which an equity lot is assumed to attract exit load.")
     p.add_argument("--stocks-ltcg", type=float, default=None,
-                   help="Flat stocks LTCG (Rs) already booked this FY — paste the total "
-                        "from your broker's tax P&L. Adds to --already-realized so the "
-                        "MF plan shrinks (Sec 112A exemption is shared with stocks).")
+                   help="Flat stocks LTCG (Rs, positive) already booked this FY — paste "
+                        "the total from your broker's tax P&L. Sec 112A pools this with "
+                        "MF LTCG before the ₹1.25L exemption.")
+    p.add_argument("--stocks-ltcl", type=float, default=None,
+                   help="Flat stocks LTCL (Rs, positive number for losses) already booked "
+                        "this FY. Sets off against current-FY LTCG before the exemption, "
+                        "so a loss-heavy stocks year can EXPAND the MF harvest budget.")
     p.add_argument("--stocks-ledger", type=Path, default=None,
                    help="Path to a CSV file of stock sells. Columns: isin, symbol, "
                         "buy_date, sell_date, quantity, buy_value, sell_value. Tool "
-                        "filters by FY (on sell_date), keeps only LTCG (>365d) with "
-                        "positive gain, sums them, folds into the budget.")
+                        "filters by FY (on sell_date), keeps only LTCG-eligible (>365d) "
+                        "rows, sums gains and losses separately, nets them, folds into "
+                        "the budget.")
     p.add_argument("--no-grandfathering", action="store_true",
                    help="Skip Sec 112A grandfathering for pre-2018 equity lots.")
     p.add_argument("--refresh-fmv", action="store_true",

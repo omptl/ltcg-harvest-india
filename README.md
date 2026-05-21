@@ -48,7 +48,8 @@ tax-harvest cas.pdf \
 | `--equity-exit-load-days N` | 365 | Days under which equity exit load is assumed |
 | `--no-grandfathering` | off | Skip Sec 112A pre-2018 cost uplift |
 | `--refresh-fmv` | off | Re-fetch the 31-Jan-2018 FMV snapshot |
-| `--stocks-ltcg AMT` | none | Flat stocks LTCG (₹) booked this FY — shrinks budget |
+| `--stocks-ltcg AMT` | none | Flat stocks LTCG (₹, positive) booked this FY |
+| `--stocks-ltcl AMT` | none | Flat stocks LTCL (₹, positive number for losses) — nets off LTCG; can expand budget |
 | `--stocks-ledger FILE` | none | Per-trade CSV of stock sells — see "Stocks vs MF" section |
 
 Two reports are written under `./reports/` (relative to the directory you run
@@ -103,10 +104,13 @@ You do **not** get a separate ₹1.25 L for stocks and another ₹1.25 L for MFs
 If you also book LTCG on direct equity this FY, fold that into the budget so
 the MF redemption plan shrinks to fit the remaining headroom. Two options:
 
-**Easy** — pass the LTCG total from your broker's tax P&L as a flat number:
+**Easy** — pass the LTCG total from your broker's tax P&L as a flat number.
+If you also have long-term losses, pass them too (positive number, abs value)
+— current-FY LTCL is set off against current-FY LTCG **before** the ₹1.25 L
+exemption applies, so a loss-heavy year actually expands the MF harvest budget:
 
 ```
-tax-harvest cas.pdf --stocks-ltcg 40000
+tax-harvest cas.pdf --stocks-ltcg 26000 --stocks-ltcl 32000
 ```
 
 **Auditable** — pass a per-trade CSV; the tool filters by FY (on `sell_date`),

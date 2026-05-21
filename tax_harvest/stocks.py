@@ -51,12 +51,25 @@ class StockLine:
 
 @dataclass
 class StocksAdjustment:
-    realized_ltcg: float = 0.0
-    lines: list[StockLine] = field(default_factory=list)
+    realized_ltcg: float = 0.0  # sum of positive long-term gains in current FY
+    realized_ltcl: float = 0.0  # sum of long-term losses (as a POSITIVE number) in current FY
+    lines: list[StockLine] = field(default_factory=list)  # per-trade detail when CSV provided
     sources: list[str] = field(default_factory=list)  # human-readable provenance
 
+    @property
+    def net_ltcg(self) -> float:
+        """LTCG minus LTCL — the figure that gets compared to the ₹1.25 L exemption.
+
+        Per Sec 112A, current-FY LTCL on listed equity / equity MF / business trust
+        units is set off against current-FY LTCG of the same class **before** the
+        ₹1.25 L exemption applies. Positive value reduces the available budget;
+        negative value (net loss) creates extra budget headroom because it can
+        absorb MF harvest gains tax-free.
+        """
+        return self.realized_ltcg - self.realized_ltcl
+
     def is_empty(self) -> bool:
-        return self.realized_ltcg == 0 and not self.lines
+        return self.realized_ltcg == 0 and self.realized_ltcl == 0 and not self.lines
 
 
 def _fy_bounds(fy_label: str) -> tuple[date, date]:
@@ -68,15 +81,24 @@ def _fy_bounds(fy_label: str) -> tuple[date, date]:
 
 def load_stocks_adjustment(flat_ltcg: float | None,
                            ledger_path: Path | None,
-                           fy_label: str) -> StocksAdjustment:
-    """Combine flat-number and CSV inputs into a single StocksAdjustment."""
+                           fy_label: str,
+                           flat_ltcl: float | None = None) -> StocksAdjustment:
+    """Combine flat-number and CSV inputs into a single StocksAdjustment.
+
+    `flat_ltcl` is the absolute value of long-term capital losses booked on
+    listed equity in the current FY — passed as a positive number.
+    """
     adj = StocksAdjustment()
     if flat_ltcg:
         adj.realized_ltcg += float(flat_ltcg)
         adj.sources.append(f"--stocks-ltcg flat input: ₹{flat_ltcg:,.2f}")
+    if flat_ltcl:
+        adj.realized_ltcl += float(flat_ltcl)
+        adj.sources.append(f"--stocks-ltcl flat input: ₹{flat_ltcl:,.2f}")
     if ledger_path is not None:
         sub = _load_ledger_csv(Path(ledger_path), fy_label)
         adj.realized_ltcg += sub.realized_ltcg
+        adj.realized_ltcl += sub.realized_ltcl
         adj.lines.extend(sub.lines)
         adj.sources.extend(sub.sources)
     return adj
@@ -119,12 +141,20 @@ def _load_ledger_csv(path: Path, fy_label: str) -> StocksAdjustment:
             # toward the current year's ₹1.25 L bucket.
             if not (fy_start <= line.sell_date <= fy_end):
                 continue
-            if line.is_ltcg and line.gain > 0:
+            # Only LTCG-eligible rows participate in the Sec 112A netting. STCG /
+            # STCL are governed by Sec 111A and are NOT pooled with LTCG for the
+            # exemption, so we ignore them here.
+            if not line.is_ltcg:
+                continue
+            if line.gain > 0:
                 adj.realized_ltcg += line.gain
-                adj.lines.append(line)
+            elif line.gain < 0:
+                adj.realized_ltcl += -line.gain
+            adj.lines.append(line)
     adj.sources.append(
         f"--stocks-ledger {path.name}: {len(adj.lines)} LTCG-eligible row(s) "
-        f"in FY {fy_label} → ₹{adj.realized_ltcg:,.2f}"
+        f"in FY {fy_label} → LTCG ₹{adj.realized_ltcg:,.2f}, "
+        f"LTCL ₹{adj.realized_ltcl:,.2f}, net ₹{adj.net_ltcg:,.2f}"
     )
     return adj
 

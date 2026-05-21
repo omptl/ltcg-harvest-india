@@ -198,10 +198,12 @@ def _render_markdown(plan: HarvestPlan, loss_candidates: list[LossCandidate],
     mf_realized = (cli_already_realized
                    if cli_already_realized is not None
                    else plan.already_realized_ltcg)
-    stocks_realized = stocks.realized_ltcg if stocks else 0.0
-    if stocks_realized:
+    if stocks and not stocks.is_empty():
         lines.append(f"| MF LTCG already booked this FY (subtracted) | ₹{mf_realized:,.2f} |")
-        lines.append(f"| Stocks LTCG accounted for (subtracted, Sec 112A shared) | ₹{stocks_realized:,.2f} |")
+        lines.append(f"| Stocks LTCG booked this FY (added to pool) | ₹{stocks.realized_ltcg:,.2f} |")
+        lines.append(f"| Stocks LTCL booked this FY (offsets pool) | −₹{stocks.realized_ltcl:,.2f} |")
+        sign = "subtracted" if stocks.net_ltcg >= 0 else "EXPANDS budget"
+        lines.append(f"| **Net stocks position** ({sign}) | **₹{stocks.net_ltcg:,.2f}** |")
     else:
         lines.append(f"| Already realised LTCG this FY (subtracted) | ₹{plan.already_realized_ltcg:,.2f} |")
     lines.append(f"| Carry-forward LTCL from prior FYs (added) | ₹{plan.carry_forward_losses:,.2f} |")
@@ -265,23 +267,34 @@ def _render_markdown(plan: HarvestPlan, loss_candidates: list[LossCandidate],
 
     # --- Stocks-side detail (read-only) -------------------------------------
     if stocks and stocks.lines:
-        lines.append("## Stocks LTCG folded into this FY's budget")
+        lines.append("## Stocks LTCG / LTCL folded into this FY's Sec 112A pool")
         lines.append("")
-        lines.append("Per the Sec 112A aggregation rule, these stock sales already consume "
-                     "part of your ₹1.25 L exemption. The tool does not recommend stock "
-                     "buys or sells — it only reads the gains you've already booked so the "
-                     "MF plan above stays inside the shared budget.")
+        lines.append("Per the Sec 112A rule, current-FY long-term gains and losses on "
+                     "listed equity / equity MF / business-trust units are netted before "
+                     "the ₹1.25 L exemption applies. Negative net → extra MF harvest "
+                     "headroom this FY. The tool does not recommend stock buys or sells — "
+                     "it only reads what you've already booked.")
         lines.append("")
-        lines.append("| Symbol | ISIN | Buy | Sell | Qty | Buy value | Sell value | LTCG |")
+        lines.append("| Symbol | ISIN | Buy | Sell | Qty | Buy value | Sell value | LTCG / (LTCL) |")
         lines.append("| --- | --- | --- | --- | ---: | ---: | ---: | ---: |")
         for ln in stocks.lines:
+            gain_disp = (f"**₹{ln.gain:,.2f}**" if ln.gain >= 0
+                         else f"_(₹{-ln.gain:,.2f})_")
             lines.append(
                 f"| {ln.symbol} | {ln.isin} | {ln.buy_date.isoformat()} "
                 f"| {ln.sell_date.isoformat()} | {ln.quantity:g} "
                 f"| ₹{ln.buy_value:,.2f} | ₹{ln.sell_value:,.2f} "
-                f"| **₹{ln.gain:,.2f}** |"
+                f"| {gain_disp} |"
             )
-        lines.append(f"| | | | | | | **Total** | **₹{stocks.realized_ltcg:,.2f}** |")
+        lines.append(
+            f"| | | | | | | **LTCG total** | **₹{stocks.realized_ltcg:,.2f}** |"
+        )
+        lines.append(
+            f"| | | | | | | **LTCL total** | **(₹{stocks.realized_ltcl:,.2f})** |"
+        )
+        lines.append(
+            f"| | | | | | | **Net** | **₹{stocks.net_ltcg:,.2f}** |"
+        )
         lines.append("")
 
     # --- Loss candidates -----------------------------------------------------
