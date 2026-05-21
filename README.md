@@ -1,140 +1,132 @@
 # tax-harvest
 
-Personal CLI tool for an Indian retail investor to identify which mutual fund units
-to redeem each financial year to harvest LTCG up to the ₹1.25 lakh exemption under
-Section 112A.
+Personal CLI for an Indian retail investor to identify which mutual fund
+units to redeem each financial year to harvest LTCG up to the ₹1,25,000
+exemption under **Section 112A**.
 
 Single-user, runs locally, no server, no PII leaves the machine.
 
-## Install
+---
+
+## Two ways to use this
+
+### A. Drive it via your AI coding agent (recommended)
+
+If you've just forked this repo and you have Claude Code, Codex, Cursor,
+Copilot Chat, Aider, Windsurf, or any other agentic coding tool, the fastest
+path is to let the agent handle everything — input gathering, install, run,
+result interpretation.
+
+1. Open this repo in your coding tool.
+2. Paste the prompt from [`prompts/harvest-runner.md`](prompts/harvest-runner.md)
+   into the chat.
+3. Answer the questions the agent asks (CAS path, password, optional broker
+   tax-P&L, safety buffer).
+4. The agent installs the project, runs the tool, and walks you through the
+   one-page Markdown summary at `reports/harvest_summary_*.md`.
+
+Inside **Claude Code** specifically, you can also invoke the dedicated
+subagent directly:
 
 ```
-python -m pip install -e .
+/agent harvest-runner
 ```
 
-Python 3.11+ required.
+The agent is briefed via [`AGENTS.md`](AGENTS.md) (cross-tool) and
+[`CLAUDE.md`](CLAUDE.md) (Claude-specific extras). Both files load
+automatically in tools that support those conventions.
 
-## Use
-
-```
-tax-harvest path/to/cas.pdf
-```
-
-You will be prompted for the CAS PDF password (typically PAN + DOB in DDMMYYYY).
-The password is never persisted.
-
-Common options:
+### B. Drive it yourself (no agent)
 
 ```
-tax-harvest cas.pdf \
-  --fy 2026-27 \
-  --already-realized 30000 \
-  --carry-forward-loss 15000 \
-  --no-cache
+python -m pip install -e .[dev]
+python -m pytest tax_harvest/tests             # sanity check — expect 92+ passes
+tax-harvest path/to/cas.pdf                    # prompts for password
 ```
 
-| Flag | Default | Purpose |
-| --- | --- | --- |
-| `--fy LABEL` | derived from today | Indian FY label like `2026-27` |
-| `--already-realized AMT` | 0 | LTCG already booked this FY — shrinks budget |
-| `--carry-forward-loss AMT` | 0 | LT capital loss carried forward — grows budget |
-| `--no-cache` | off | Force refresh of AMFI NAV file |
-| `--no-report` | off | Skip writing the JSON report file |
-| `--password PWD` | prompt | Provide password non-interactively (not recommended) |
-| `--nri` | off | Assert NRI status (in addition to auto-detection) |
-| `--joint-holdings` | off | Assert joint-holding presence |
-| `--overrides FILE` | none | JSON file: `{ISIN: category}` overrides for classifier |
-| `--suspended FILE` | none | JSON file: additional suspended/wound-up ISIN list |
-| `--equity-exit-load-days N` | 365 | Days under which equity exit load is assumed |
-| `--no-grandfathering` | off | Skip Sec 112A pre-2018 cost uplift |
-| `--refresh-fmv` | off | Re-fetch the 31-Jan-2018 FMV snapshot |
-| `--safety-buffer-pct N` | 0 | Shave N% off the budget before planning — absorbs NAV swing between plan and execution (Indian MFs are end-of-day priced). Typical 1.0–2.0. |
-| `--stocks-ltcg AMT` | none | Flat stocks LTCG (₹, positive) booked this FY |
-| `--stocks-ltcl AMT` | none | Flat stocks LTCL (₹, positive number for losses) — nets off LTCG; can expand budget |
-| `--stocks-ledger FILE` | none | Per-trade CSV of stock sells — see "Stocks vs MF" section |
+Python 3.11+ required. On Windows, prefix runs with `PYTHONIOENCODING=utf-8`
+so the Rich console can render `₹`.
 
-Two reports are written under `./reports/` (relative to the directory you run
-`tax-harvest` from — gitignored at the repo root):
-
-- `harvest_plan_<FY>_<timestamp>.json` — full structured output for tooling.
-- `harvest_summary_<FY>_<timestamp>.md` — one-page Markdown summary you can
-  open in any editor or GitHub viewer; this is the artifact a non-developer
-  should read.
-
-The AMFI NAV cache
-lives at `./cache/nav_cache.txt` (refreshed every 24h). The Sec 112A
-31-Jan-2018 FMV snapshot is cached permanently at `./cache/fmv_jan_2018.txt`.
-Both paths are relative to the directory you run `tax-harvest` from and are
-gitignored at the repo root.
-
-## What it does
-
-1. Parses your CAS PDF via [`casparser`](https://pypi.org/project/casparser/) —
-   handles CAMS, KFintech, and MF Central statements. Heuristically detects
-   NRI status and joint-holding mode and emits warnings.
-2. Classifies each scheme (equity / ELSS / arbitrage / aggressive hybrid /
-   debt-pre-Apr-2023 / debt-post-Apr-2023 / international / gold / etc).
-   An ISIN-keyed overrides file (`--overrides`) wins over name heuristics.
-3. Builds per `(folio, scheme)` FIFO lot queues from your transaction history.
-   Bonus units carry zero cost basis; switch-ins create new lots at their NAV;
-   dividend reinvestments create new lots at the reinvestment NAV.
-4. Fetches today's NAV from the AMFI feed for each scheme, plus the 31-Jan-2018
-   FMV snapshot for Sec 112A grandfathering on pre-2018 equity lots.
-5. For each lot, evaluates: LTCG eligibility, ELSS per-lot 3-year lock-in,
-   solution-oriented 5-year lock-in, FMP / close-ended status, Section 50AA
-   applicability for debt units acquired on/after 1-Apr-2023, exit-load window
-   (configurable via `--equity-exit-load-days`), and suspended/wound-up status.
-6. Sec 112A grandfathering: for equity lots acquired on or before 31-Jan-2018,
-   effective cost = `max(actual, min(FMV_31_Jan_2018, sale_NAV))`. The plan
-   shows actual vs effective cost per affected lot.
-7. Greedy harvest: sort eligible lots by gain-per-unit descending, fill until
-   the effective LTCG budget is exhausted, fractional-truncating the marginal
-   lot to land exactly on budget.
-8. Surfaces a secondary table of loss-harvesting candidates (STCL vs LTCL).
-
-## Stocks vs mutual funds — the ₹1.25 L exemption is shared
-
-The Sec 112A ₹1,25,000 annual exemption is **aggregate** across:
-
-1. Listed equity shares (STT-paid on both buy + sell)
-2. Equity-oriented mutual fund units (STT-paid on redemption) — *what this tool sees*
-3. Equity business-trust units (REITs / InvITs)
-
-You do **not** get a separate ₹1.25 L for stocks and another ₹1.25 L for MFs.
-
-If you also book LTCG on direct equity this FY, fold that into the budget so
-the MF redemption plan shrinks to fit the remaining headroom. Two options:
-
-**Easy** — pass the LTCG total from your broker's tax P&L as a flat number.
-If you also have long-term losses, pass them too (positive number, abs value)
-— current-FY LTCL is set off against current-FY LTCG **before** the ₹1.25 L
-exemption applies, so a loss-heavy year actually expands the MF harvest budget:
+A worked invocation that uses every lever:
 
 ```
-tax-harvest cas.pdf --stocks-ltcg 26000 --stocks-ltcl 32000
+PYTHONIOENCODING=utf-8 tax-harvest path/to/cas.pdf \
+  --stocks-ledger path/to/stocks.csv \
+  --safety-buffer-pct 1.5 \
+  --fy 2026-27
 ```
 
-**Auditable** — pass a per-trade CSV; the tool filters by FY (on `sell_date`),
-keeps only LTCG-eligible rows (held > 365 days) with positive gain, sums them,
-and folds the result into the budget:
+---
+
+## Inputs you'll need
+
+### 1. CAS PDF (required)
+
+Download a **Detailed** Consolidated Account Statement covering the longest
+available period (pre-2018 lots matter for Sec 112A grandfathering).
+
+| Source | Coverage |
+| --- | --- |
+| [MF Central](https://www.mfcentral.com) | CAMS + KFintech + NSDL/CDSL demat (broadest) |
+| [CAMSonline](https://www.camsonline.com) | CAMS + KFintech AMCs only |
+
+Email delivery takes ~10–30 minutes. The PDF is password-protected;
+password is usually your PAN in uppercase, or PAN + DOB in `DDMMYYYY` format
+(the delivery email tells you which).
+
+### 2. Stocks tax-P&L (optional, materially affects the result)
+
+The Sec 112A ₹1.25 L exemption is **aggregate** across listed shares,
+equity MFs, and equity business trusts — you don't get a separate ₹1.25 L
+for each. The tool reads only your MFs from the CAS, so you need to tell it
+how much stock-side LTCG / LTCL you've already booked in this FY (if any).
+
+Three input shapes — pick whichever matches what your broker gave you:
 
 ```
-tax-harvest cas.pdf --stocks-ledger stocks.csv
+--stocks-ltcg 26000 --stocks-ltcl 32000    # flat numbers; both positive
+--stocks-ledger path/to/stocks.csv         # per-trade CSV (auditable)
 ```
 
-The CSV must have these columns (header required, order flexible):
+Combine the flags — they sum. See "Stocks CSV schema" below.
+
+Note: current-FY long-term **losses** are set off against current-FY
+long-term gains **before** the ₹1.25 L exemption kicks in. So a
+loss-heavy stock year actually **expands** the MF harvest budget. The
+tool nets LTCG and LTCL for you; just pass both.
+
+### 3. Safety buffer (recommended: 1.5%)
+
+```
+--safety-buffer-pct 1.5
+```
+
+Indian MFs are end-of-day priced. The NAV you transact at is declared
+**after** market close that day, not at the moment you place the order.
+Mid-cap funds can swing ±1–2% intraday. A 1.5% buffer guarantees the
+booked LTCG stays under the ₹1.25 L exemption even if NAV ticks up
+between plan time and execution.
+
+Trade-off: ~₹1,900 of exemption goes unused unless you follow up with a
+top-up redemption tomorrow against the now-known NAV.
+
+---
+
+## Stocks CSV schema
+
+Header required. Column order flexible. Save as UTF-8 CSV.
 
 | Column | Format | Notes |
 | --- | --- | --- |
 | `isin` | string | e.g. `INE002A01018`. Used for traceability. |
 | `symbol` | string | e.g. `TCS`. |
-| `buy_date` | date | `YYYY-MM-DD`, `DD-MM-YYYY`, `DD/MM/YYYY`, or `DD-Mon-YYYY`. |
-| `sell_date` | date | same formats. Leave blank for open positions (ignored). |
+| `buy_date` | date | `YYYY-MM-DD`, `DD-MM-YYYY`, `DD/MM/YYYY`, or `DD-Mon-YYYY` |
+| `sell_date` | date | Same formats. Leave blank for open positions (ignored). |
 | `quantity` | number | shares sold in this row. |
 | `buy_value` | ₹ | total acquisition cost for this lot. |
 | `sell_value` | ₹ | total proceeds for this lot. |
 
-Example minimal `stocks.csv`:
+Minimal example:
 
 ```csv
 isin,symbol,buy_date,sell_date,quantity,buy_value,sell_value
@@ -142,57 +134,123 @@ INE002A01018,TCS,2024-01-15,2026-04-22,10,32000,42000
 INE001A01036,RELIANCE,2023-06-01,2026-09-12,5,12000,15500
 ```
 
-Both flags can be combined — they sum. The Markdown summary will break the
-budget down so you can audit where each rupee of shrinkage came from.
+Converting from broker exports:
+- **Zerodha Console** (Tax P&L Excel): `Tradewise Exits` sheet, `Equity - Long Term`
+  section. Map `Symbol → symbol`, `ISIN → isin`, `Entry Date → buy_date`,
+  `Exit Date → sell_date`, `Quantity → quantity`, `Buy Value → buy_value`,
+  `Sell Value → sell_value`.
+- **Other brokers**: same idea, different sheet names. If you're using the
+  agent-driven flow above, the agent will do this transformation for you.
 
-This tool only sees mutual fund folios from your CAS — direct demat equity
-holdings are out of scope as a recommendation source (the tool never suggests
-stock buys or sells). The stocks input only affects the **budget**, not the plan.
+The tool filters by FY (on `sell_date`), keeps only LTCG-eligible rows
+(holding > 365 days), separates gains and losses, sums each, nets them,
+folds the result into the budget.
 
-## What it explicitly does not do
+---
 
-- No web UI, no server, no database, no auth, no multi-user support.
-- No automated redemption execution.
-- No tax filing integration.
-- No coverage of direct equity shares (see note above — combine via `--already-realized`).
-- No PII storage or upload. The CAS PDF stays on your local disk.
+## Outputs
 
-## Caveats & manual checks
+Written to `./reports/` (cwd-relative, gitignored):
 
-The tool prints warnings for everything it can't be fully sure about:
+- **`harvest_summary_<FY>_<ts>.md`** — one-page Markdown summary. **Read this.**
+- `harvest_plan_<FY>_<ts>.json` — full structured plan for tooling.
 
-- International / global / FoF schemes — post-Budget-2024/2025 treatment depends
-  on the underlying allocation.
-- Gold / silver schemes — separate post-Budget-2024 rules; verify per fund.
-- Solution-oriented schemes (retirement / children's gift) — also need a
-  goal-age check that isn't in the CAS.
-- Demat-held units may not appear in CAS at all.
-- NRI status detection is heuristic — pass `--nri` if your CAS doesn't surface it.
-- Joint-holding detection is heuristic — pass `--joint-holdings` if missed.
-- Pre-31-Jan-2018 equity lots have grandfathering applied automatically when the
-  FMV snapshot is fetchable; verify each effective cost in the report.
-- The suspended-schemes list ships empty; populate `tax_harvest/data/suspended_schemes.json`
-  or use `--suspended` if you hold any wound-up funds. NAV-miss on the AMFI feed
-  also flags a scheme as unverified.
+The Markdown summary has:
 
-This tool is for personal analysis only. Verify with a CA before transacting,
-and remember that the NAV at execution will differ from the NAV at analysis.
+1. **🟢 / 🟡 Redemption window** — should you act now or wait until tomorrow?
+   Based on current IST time vs the 3 PM cut-off.
+2. **Budget breakdown** — exemption, prior MF LTCG, stocks LTCG/LTCL, net
+   stocks position, carry-forward, safety buffer, effective budget.
+3. **What to sell** — per-scheme: units, NAV, cost basis, estimated LTCG.
+4. **How to execute** — order placement, post-settlement reinvestment.
+5. **Spot-check checklist** — what to verify on your AMC portal before
+   clicking Sell.
+6. **Stocks LTCG / LTCL detail** (if you provided a ledger).
+7. **Loss-harvesting candidates** (top 10).
+8. **Warnings** — international / gold / unclassified / suspended schemes
+   to verify manually.
 
-### Definition of Done — what you still need to verify
+Caches live in `./cache/`:
+- `nav_cache.txt` — AMFI daily NAV (24h TTL; `--no-cache` to bust).
+- `fmv_jan_2018.txt` — historical FMV snapshot (permanent; `--refresh-fmv` to bust).
 
-The automated tests cover algorithm correctness against synthetic data. The
-following items from the original spec require running against your real
-CAS PDF:
+---
 
-1. Reads your real CAS PDF without error.
+## CLI flag reference
+
+| Flag | Default | Purpose |
+| --- | --- | --- |
+| `cas_pdf` (positional) | required | Path to the CAS PDF |
+| `--password PWD` | prompt | CAS PDF password (omit to be prompted; recommended) |
+| `--fy LABEL` | derived from today | Indian FY label, e.g. `2026-27` |
+| `--stocks-ltcg AMT` | none | Flat stocks LTCG (₹, positive) booked this FY |
+| `--stocks-ltcl AMT` | none | Flat stocks LTCL (₹, positive number for losses) — nets off LTCG; can expand budget |
+| `--stocks-ledger FILE` | none | Per-trade CSV — see "Stocks CSV schema" |
+| `--safety-buffer-pct N` | 0 | Shave N% off budget — absorbs NAV swing. Typical 1.0–2.0. |
+| `--already-realized AMT` | 0 | MF LTCG already booked this FY (separate from stocks) |
+| `--carry-forward-loss AMT` | 0 | LTCL from PRIOR FYs being applied now |
+| `--nri` / `--joint-holdings` | off | Override heuristics if your CAS doesn't surface these |
+| `--overrides FILE` | none | JSON `{ISIN: category}` for misclassified schemes |
+| `--suspended FILE` | none | JSON list of additional suspended/wound-up ISINs |
+| `--equity-exit-load-days N` | 365 | Days under which equity exit load is assumed |
+| `--no-grandfathering` | off | Skip Sec 112A pre-2018 cost uplift |
+| `--refresh-fmv` | off | Re-fetch the 31-Jan-2018 FMV snapshot |
+| `--no-cache` | off | Force AMFI NAV refresh |
+| `--no-report` | off | Skip writing JSON + Markdown to `reports/` |
+
+---
+
+## What it does NOT do
+
+- No web UI, no server, no database, no auth, no multi-user.
+- No automated redemption execution — it tells you what to do; you do it.
+- No tax-filing integration.
+- No coverage of direct equity recommendations (read-only on stocks).
+- No PII storage or upload.
+- No surcharge / cess / TDS computation. The plan harvests *up to* the
+  exemption → zero tax in the current FY by construction.
+
+---
+
+## Caveats (the tool prints warnings for these)
+
+- **International / global FoFs** — post-Budget-2024/2025 treatment depends
+  on underlying allocation. Verify per fund.
+- **Gold / silver schemes** — separate post-Budget-2024 rules. Verify per fund.
+- **Solution-oriented schemes** (retirement / children's gift) — also need
+  a goal-age check that isn't in the CAS.
+- **Demat-held units** may not appear in CAS at all. Cross-check.
+- **NRI / joint-holding** detection is heuristic; pass `--nri` /
+  `--joint-holdings` if your CAS doesn't surface these.
+- **Pre-31-Jan-2018 equity lots** get grandfathering applied automatically
+  when the FMV snapshot loads; verify each effective cost in the report.
+- **Suspended schemes** — packaged list ships empty; populate
+  `tax_harvest/data/suspended_schemes.json` or use `--suspended` if you
+  hold any wound-up funds.
+- **NAV at execution differs from NAV at analysis** — Indian MFs are
+  end-of-day priced. The safety buffer absorbs typical intraday swing.
+- **Public-holiday calendar is not modelled** — the timing advisory uses
+  "next weekday" not "next trading day". Verify against NSE / AMC calendar
+  if your run lands near Diwali / Republic Day / etc.
+
+This tool is for personal analysis only. **Verify with a CA before
+transacting.**
+
+---
+
+## Definition of Done — what you still need to verify against your real CAS
+
+1. Reads your CAS PDF without error.
 2. Correctly identifies your LTCG-eligible lots — spot-check a few against
-   CAMS / KFintech online statements.
-3. Outputs a redemption plan that, if executed, produces LTCG close to ₹1.25L —
-   verify the total in the bottom-right of the plan.
-4. Passes a manual cross-check against your CAMS statement (unit counts,
-   purchase dates, cost basis).
+   CAMS / KFintech / MF Central online statements.
+3. Outputs a redemption plan that, if executed, produces LTCG close to the
+   effective budget (top-right of the Markdown summary).
+4. Unit counts, purchase dates, and cost basis in the action table
+   reconcile with your AMC portal.
 
 Run with `--no-report` first if you don't want a JSON dump while testing.
+
+---
 
 ## Project layout
 
@@ -206,22 +264,16 @@ tax_harvest/
 ├── fmv_2018.py      # 31-Jan-2018 FMV snapshot for Sec 112A grandfathering
 ├── harvest.py       # Greedy harvesting algorithm
 ├── loss_harvest.py  # Loss-harvest candidate identification
-├── report.py        # Rich tables + JSON report writer
+├── stocks.py        # Stocks ledger / flat-input adjustment (LTCG/LTCL netting)
+├── timing.py        # IST cut-off advisory + NAV staleness
+├── report.py        # Rich tables + JSON + Markdown writers
 ├── models.py        # Pydantic data models
 ├── data/
-│   ├── category_overrides.json   # ISIN -> SchemeCategory override map
+│   ├── category_overrides.json   # ISIN → SchemeCategory overrides
 │   └── suspended_schemes.json    # known wound-up scheme list
-└── tests/
+└── tests/                         # 92+ tests, ~1s
 ```
 
-## Tests
-
-```
-python -m pytest tax_harvest/tests
-```
-
-62 tests cover FIFO replay, lock-in enforcement, Section 50AA per-lot bucketing,
-budget arithmetic with carry-forward losses and prior realizations, scheme
-classification + overrides, AMFI NAV parsing, loss categorization, Sec 112A
-grandfathering math, suspended-scheme exclusion, and NRI / joint-holding
-heuristic detection.
+Architecture deep-dive (data flow, design decisions, tax-rule cheat sheet,
+edge-case-to-test map) lives in [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md).
+Agent-driving guide lives in [`AGENTS.md`](AGENTS.md).
