@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>tax-harvest — Pyodide compatibility spike</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { margin-bottom: 0.5rem; }
+  .sub { color: #666; margin-top: 0; }
+  .step { border-left: 3px solid #ddd; padding: 0.5rem 1rem; margin: 1rem 0; }
+  .step.pending { border-color: #888; }
+  .step.running { border-color: #f5a623; background: #fffaf0; }
+  .step.ok { border-color: #2ea043; background: #f0fff4; }
+  .step.fail { border-color: #d73a49; background: #fff5f5; }
+  .step h3 { margin: 0 0 0.25rem 0; font-size: 1rem; }
+  .step .detail { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 12px; color: #444; white-space: pre-wrap; word-break: break-word; }
+  .summary { margin-top: 2rem; padding: 1rem; background: #f6f8fa; border-radius: 6px; font-size: 15px; }
+  .summary.green { background: #f0fff4; border: 1px solid #2ea043; }
+  .summary.red { background: #fff5f5; border: 1px solid #d73a49; }
+  code { background: #f6f8fa; padding: 0.1em 0.4em; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>tax-harvest — Pyodide compatibility spike</h1>
+<p class="sub">
+  Day-1 check before committing to a browser-side web UI for the
+  <code>tax-harvest</code> CLI. Verifies that <code>casparser</code> and its
+  dependencies actually load and run inside Pyodide, and tests whether the AMFI
+  NAV endpoint can be fetched cross-origin from a browser.
+  <br><br>
+  <strong>How to run</strong>: open this file directly in any modern browser
+  (Chrome / Firefox / Safari / Edge). Steps run automatically in sequence.
+  Total time: ~30–90 seconds first run (Pyodide bundle download).
+</p>
+
+<div id="steps"></div>
+<div id="summary" class="summary"></div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.29.4/full/pyodide.js"></script>
+<script>
+const stepsEl = document.getElementById('steps');
+const summaryEl = document.getElementById('summary');
+const results = {};
+
+function step(id, title) {
+  const div = document.createElement('div');
+  div.className = 'step pending';
+  div.id = 'step-' + id;
+  div.innerHTML = `<h3>${title}</h3><div class="detail">queued…</div>`;
+  stepsEl.appendChild(div);
+  return {
+    running(msg) { div.className = 'step running'; div.querySelector('.detail').textContent = msg; },
+    ok(msg)      { div.className = 'step ok';      div.querySelector('.detail').textContent = '✓ ' + msg; results[id] = { ok: true, msg }; },
+    fail(msg)    { div.className = 'step fail';    div.querySelector('.detail').textContent = '✗ ' + msg; results[id] = { ok: false, msg }; },
+  };
+}
+
+async function run() {
+  // --- Step 1: Pyodide load ---
+  const s1 = step('pyodide', '1. Load Pyodide runtime');
+  let pyodide;
+  try {
+    s1.running('Downloading Pyodide bundle (~10 MB, cached after first load)…');
+    pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.4/full/' });
+    s1.ok(`Pyodide ${pyodide.version} ready. Python: ${pyodide.runPython('import sys; sys.version')}`);
+  } catch (e) {
+    s1.fail(`Pyodide failed to load: ${e.message}`);
+    return finish();
+  }
+
+  // --- Step 2: micropip ---
+  const s2 = step('micropip', '2. Load micropip (package installer)');
+  try {
+    s2.running('Loading micropip…');
+    await pyodide.loadPackage(['micropip']);
+    s2.ok('micropip loaded');
+  } catch (e) {
+    s2.fail(`micropip failed: ${e.message}`);
+    return finish();
+  }
+
+  // --- Step 3: cryptography (C-extension wheel) ---
+  const s3 = step('cryptography', '3. Install cryptography (needed for encrypted CAS PDFs)');
+  try {
+    s3.running('Loading cryptography wheel…');
+    await pyodide.loadPackage(['cryptography']);
+    pyodide.runPython('import cryptography; print(cryptography.__version__)');
+    s3.ok(`cryptography ${pyodide.runPython('import cryptography; cryptography.__version__')} loaded`);
+  } catch (e) {
+    s3.fail(`cryptography failed: ${e.message}`);
+    // Continue — some PDFs work without it
+  }
+
+  // --- Step 3b: stub casparser-isin to dodge rapidfuzz (no Pyodide wheel) ---
+  // casparser-isin's only purpose is ISIN/scheme-code enrichment; it is used by
+  // casparser.process.utils (MFISINDb) and nsdl_statement.py (ISINDb), but NOT
+  // by cas_detailed.py / cas_summary.py — which is what CAMS / KFin / MF-Central
+  // statements use. We install a stub module that satisfies the imports without
+  // pulling rapidfuzz's C++ dependency.
+  const s3b = step('isin-stub', '3b. Install casparser-isin stub (sidesteps rapidfuzz C++ dep)');
+  try {
+    s3b.running('Writing stub module under site-packages…');
+    await pyodide.runPythonAsync(`
+import os, sys
+stub_dir = next(p for p in sys.path if p.endswith('site-packages'))
+pkg_dir = os.path.join(stub_dir, 'casparser_isin')
+os.makedirs(pkg_dir, exist_ok=True)
+with open(os.path.join(pkg_dir, '__init__.py'), 'w') as f:
+    f.write("""\
+class _NoOpDb:
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def __getattr__(self, name):
+        def _stub(*a, **k): return None
+        return _stub
+
+class MFISINDb(_NoOpDb): pass
+class ISINDb(_NoOpDb): pass
+class SchemeData:
+    isin = amfi_code = name = rta = rta_code = None
+    def __init__(self, *a, **k): pass
+__version__ = "stub-0.0"
+""")
+import casparser_isin
+print('casparser_isin stub ok:', casparser_isin.__version__)
+`);
+    s3b.ok('casparser_isin stub installed (ISIN enrichment will be no-op)');
+  } catch (e) {
+    s3b.fail(`stub install failed: ${e.message}`);
+    return finish();
+  }
+
+  // --- Step 4: casparser with deps=False (manual deps; skip casparser-isin) ---
+  const s4 = step('casparser', '4. Install casparser (manual deps; isin stubbed)');
+  try {
+    s4.running('Installing casparser manual deps…');
+    await pyodide.runPythonAsync(`
+import micropip
+# Manual deps from casparser pyproject, minus casparser-isin (stubbed above).
+await micropip.install([
+    'click>=7.0,<9.0',
+    'colorama>=0.4.6,<0.5',
+    'pdfminer.six==20240706',
+    'python-dateutil>=2.8.2,<3',
+    'rich>=13.5.2,<14',
+    'pydantic>=2.3.0,<3',
+])
+# Now install casparser without re-pulling its declared deps.
+await micropip.install('casparser', deps=False)
+import casparser, pdfminer
+print('casparser:', getattr(casparser, '__version__', 'loaded'))
+`);
+    const cas_v = pyodide.runPython('import casparser; getattr(casparser, "__version__", "loaded")');
+    const pdf_v = pyodide.runPython('import pdfminer; pdfminer.__version__');
+    s4.ok(`casparser ${cas_v} + pdfminer.six ${pdf_v} installed (isin stubbed)`);
+  } catch (e) {
+    s4.fail(`casparser failed: ${e.message}\n\nBlocker. Browser-side parsing not viable as-is.`);
+    return finish();
+  }
+
+  // --- Step 5: requests shim — casparser uses requests for ISIN lookups.
+  // Pyodide cannot use real requests (sockets). pyodide-http monkey-patches it
+  // to route through fetch(). Test if that path works.
+  const s5 = step('requests-shim', '5. Patch requests via pyodide-http (CAS uses requests internally)');
+  try {
+    s5.running('Loading pyodide-http and applying patch…');
+    await pyodide.runPythonAsync(`
+import micropip
+await micropip.install('pyodide-http')
+import pyodide_http
+pyodide_http.patch_all()
+import requests
+print('requests:', requests.__version__)
+`);
+    const rv = pyodide.runPython('import requests; requests.__version__');
+    s5.ok(`requests ${rv} ready (patched through fetch())`);
+  } catch (e) {
+    s5.fail(`requests shim failed: ${e.message}\nCAS parsing itself may still work if it does not hit network during parse.`);
+  }
+
+  // --- Step 6: pure-Python casparser call shape (no real PDF, just imports) ---
+  const s6 = step('parse-api', '6. Verify casparser.read_cas_pdf API is callable');
+  try {
+    s6.running('Importing read_cas_pdf and checking it is callable…');
+    pyodide.runPython(`
+from casparser import read_cas_pdf
+assert callable(read_cas_pdf), "read_cas_pdf is not callable"
+`);
+    s6.ok('read_cas_pdf imported and callable. Real PDF test needs an actual file upload — separate step.');
+  } catch (e) {
+    s6.fail(`API check failed: ${e.message}`);
+  }
+
+  // --- Step 7: AMFI NAV CORS fetch ---
+  const s7 = step('amfi-cors', '7. Test AMFI NAVAll fetch (CORS check)');
+  try {
+    s7.running('Fetching https://www.amfiindia.com/spages/NAVAll.txt from browser…');
+    const resp = await fetch('https://www.amfiindia.com/spages/NAVAll.txt');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    const lines = text.split('\n').length;
+    s7.ok(`Fetched ${(text.length/1024).toFixed(0)} KB, ~${lines} lines. CORS is OPEN — browser can read AMFI directly. No proxy needed.`);
+  } catch (e) {
+    s7.fail(`Direct fetch blocked: ${e.message}\nWorkaround: GitHub Actions cron mirrors NAVAll.txt into web/data/ daily; browser reads from same-origin static file.`);
+  }
+
+  // --- Step 8: AMFI historical FMV fetch ---
+  const s8 = step('amfi-fmv', '8. Test AMFI 31-Jan-2018 FMV historical fetch (CORS check)');
+  try {
+    s8.running('Fetching DownloadNAVHistoryReport_Po.aspx for 31-Jan-2018…');
+    const url = 'https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx?frmdt=31-Jan-2018&todt=31-Jan-2018';
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    s8.ok(`Fetched ${(text.length/1024).toFixed(0)} KB. CORS open here too.`);
+  } catch (e) {
+    s8.fail(`Direct fetch blocked: ${e.message}\nWorkaround: ship a static fmv_jan_2018.txt in web/data/ (1.2 MB, immutable file — historical NAVs don't change).`);
+  }
+
+  finish();
+}
+
+function finish() {
+  const allOk = Object.values(results).every(r => r.ok);
+  const blocker = !results.pyodide?.ok || !results.casparser?.ok;
+  if (blocker) {
+    summaryEl.className = 'summary red';
+    summaryEl.innerHTML = `
+      <strong>❌ Blocker hit.</strong> Browser-side parsing is not viable as-is.
+      Pivot to <strong>Option B</strong> (packaged local binary via Docker / pyinstaller) or
+      add a thin server-side proxy that only handles parsing (still no PII storage — process and discard).
+    `;
+  } else if (allOk) {
+    summaryEl.className = 'summary green';
+    summaryEl.innerHTML = `
+      <strong>✅ All checks passed.</strong> Day-1 spike clears the way for the full web UI build.
+      Casparser loads in browser, API is callable, AMFI CORS is open (no proxy needed).
+      Next: real PDF parse test → frontend form → result rendering.
+    `;
+  } else {
+    summaryEl.className = 'summary';
+    summaryEl.innerHTML = `
+      <strong>⚠ Partial pass.</strong> Critical path works but some workarounds needed
+      (likely CORS fallback via static mirror). Web UI still viable. Build adds ~1 day for
+      the GitHub Actions NAV mirror.
+    `;
+  }
+  summaryEl.innerHTML += `<br><br><strong>Results JSON</strong> (for copy-paste back to the chat):
+    <pre style="background:#fff;border:1px solid #ddd;padding:0.5rem;border-radius:4px;font-size:12px;">${JSON.stringify(results, null, 2)}</pre>`;
+}
+
+run().catch(e => {
+  summaryEl.className = 'summary red';
+  summaryEl.textContent = 'Spike crashed: ' + e.message;
+});
+</script>
+</body>
+</html>

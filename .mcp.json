@@ -3,6 +3,13 @@
     "context7": {
       "command": "npx",
       "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "agent-browser": {
+      "command": "node",
+      "args": [
+        ".mcp-tools/agent-browser/node_modules/@agent-browser-io/browser/bin/index.cjs",
+        "mcp"
+      ]
     }
   }
 }

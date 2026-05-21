@@ -7,6 +7,9 @@ venv/
 build/
 dist/
 
+# MCP server local installs (patched agent-browser etc.)
+.mcp-tools/
+
 # Tool-generated artifacts — kept project-local + never committed
 cache/
 reports/
