@@ -43,152 +43,514 @@
 </script>
 
 <style>
+  /* ─────────────── design tokens ─────────────── */
   :root {
-    --fg: #1f2328; --muted: #6b7280; --bg: #ffffff; --soft: #f6f8fa;
-    --line: #d0d7de; --brand: #1f6feb; --ok: #1a7f37; --warn: #9a6700;
-    --err: #d1242f;
+    --fg: #0f172a;           /* slate-900 */
+    --fg-soft: #334155;      /* slate-700 */
+    --muted: #64748b;        /* slate-500 */
+    --bg: #ffffff;
+    --surface: #f8fafc;      /* slate-50 */
+    --surface-2: #f1f5f9;    /* slate-100 */
+    --line: #e2e8f0;         /* slate-200 */
+    --line-strong: #cbd5e1;  /* slate-300 */
+
+    --brand: #0d9488;        /* teal-600  (trust + finance) */
+    --brand-2: #0f766e;      /* teal-700 */
+    --brand-soft: #f0fdfa;   /* teal-50  */
+    --brand-line: #99f6e4;   /* teal-200 */
+
+    --ok: #15803d;           /* green-700 */
+    --ok-soft: #f0fdf4;
+    --ok-line: #86efac;
+    --warn: #b45309;         /* amber-700 */
+    --warn-soft: #fffbeb;
+    --warn-line: #fcd34d;
+    --err: #b91c1c;          /* red-700 */
+    --err-soft: #fef2f2;
+    --err-line: #fca5a5;
+
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow:    0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
+    --shadow-lg: 0 4px 20px rgba(15, 23, 42, 0.12);
+    --radius: 10px;
+    --radius-lg: 14px;
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+            "Helvetica Neue", Arial, "Noto Sans", sans-serif,
+            "Apple Color Emoji", "Segoe UI Emoji";
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
   }
+
+  /* ─────────────── reset + base ─────────────── */
   * { box-sizing: border-box; }
-  body { font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); margin: 0; background: var(--bg); }
-  header { background: var(--soft); border-bottom: 1px solid var(--line); padding: 1.5rem 1rem; }
-  header .wrap { max-width: 900px; margin: 0 auto; }
-  header h1 { margin: 0 0 0.25rem 0; font-size: 1.6rem; }
-  header p { margin: 0; color: var(--muted); }
-  main { max-width: 900px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
-  .privacy { background: #ddf4ff; border: 1px solid #54aeff; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; font-size: 14px; }
-  .privacy strong { color: var(--brand); }
-  .card { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
-  .card h2 { margin: 0 0 0.75rem 0; font-size: 1.1rem; }
-  .grid { display: grid; gap: 0.75rem; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font: 15px/1.6 var(--font);
+    color: var(--fg);
+    background: var(--surface);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  a { color: var(--brand-2); text-decoration: none; border-bottom: 1px solid transparent; transition: border-color .15s; }
+  a:hover { border-bottom-color: var(--brand); }
+  ::selection { background: var(--brand-line); color: var(--fg); }
+
+  /* ─────────────── top disclaimer strip ─────────────── */
+  .topstrip {
+    background: #1e293b; color: #cbd5e1; font-size: 12.5px; line-height: 1.5;
+    padding: 8px 16px; text-align: center;
+  }
+  .topstrip strong { color: #fcd34d; }
+  .topstrip a { color: #5eead4; border-bottom-color: transparent; }
+  .topstrip a:hover { border-bottom-color: #5eead4; }
+
+  /* ─────────────── header ─────────────── */
+  header.site {
+    background: linear-gradient(180deg, var(--bg) 0%, var(--brand-soft) 100%);
+    border-bottom: 1px solid var(--brand-line);
+  }
+  header .wrap {
+    max-width: 980px; margin: 0 auto; padding: 28px 20px 32px;
+    display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center;
+  }
+  header .brand h1 {
+    margin: 0 0 6px; font-size: 26px; font-weight: 700; letter-spacing: -0.01em;
+    color: var(--fg);
+  }
+  header .brand h1 .tag { color: var(--brand-2); }
+  header .brand p { margin: 0; color: var(--muted); font-size: 15px; max-width: 56ch; }
+  header .meta { display: flex; gap: 16px; font-size: 13px; color: var(--muted); align-items: center; }
+  header .meta .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(13, 148, 136, 0.08); border: 1px solid var(--brand-line);
+    color: var(--brand-2); padding: 5px 10px; border-radius: 999px;
+    font-weight: 600; font-size: 12px;
+  }
+  @media (max-width: 720px) {
+    header .wrap { grid-template-columns: 1fr; padding: 22px 18px 26px; }
+    header .meta { flex-wrap: wrap; }
+    header .brand h1 { font-size: 22px; }
+  }
+
+  /* ─────────────── why-this-exists explainer ─────────────── */
+  .explainer {
+    max-width: 980px; margin: 28px auto 8px; padding: 0 20px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+  }
+  .explainer .why {
+    background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px 16px; box-shadow: var(--shadow-sm);
+  }
+  .explainer .why .icon { font-size: 20px; line-height: 1; margin-bottom: 6px; }
+  .explainer .why h3 { margin: 0 0 4px; font-size: 14px; font-weight: 700; color: var(--fg); }
+  .explainer .why p  { margin: 0; font-size: 13px; color: var(--fg-soft); line-height: 1.5; }
+  @media (max-width: 720px) { .explainer { grid-template-columns: 1fr; gap: 10px; margin-top: 20px; } }
+
+  /* ─────────────── main + cards ─────────────── */
+  main { max-width: 980px; margin: 0 auto; padding: 28px 20px 64px; }
+
+  .card {
+    background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-lg);
+    padding: 22px 24px; margin-bottom: 18px; box-shadow: var(--shadow-sm);
+  }
+  .card .head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .card .stepnum {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 999px;
+    background: var(--brand); color: #fff; font-weight: 700; font-size: 13px;
+    flex-shrink: 0;
+  }
+  .card h2 { margin: 0; font-size: 17px; font-weight: 700; color: var(--fg); }
+  .card .sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+
+  .grid { display: grid; gap: 14px; }
   .grid.cols-2 { grid-template-columns: 1fr 1fr; }
   @media (max-width: 600px) { .grid.cols-2 { grid-template-columns: 1fr; } }
-  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 0.25rem; color: var(--fg); }
-  label .hint { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 0.4em; }
-  input[type=text], input[type=password], input[type=number], input[type=file] {
-    width: 100%; padding: 0.5rem 0.6rem; border: 1px solid var(--line); border-radius: 6px; font: inherit;
+
+  /* ─────────────── form fields ─────────────── */
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--fg); }
+  label .hint { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
+  input[type=text], input[type=password], input[type=number] {
+    width: 100%; padding: 10px 12px; border: 1.5px solid var(--line-strong);
+    border-radius: 8px; font: inherit; color: var(--fg);
+    background: var(--bg); transition: border-color .15s, box-shadow .15s;
   }
-  input:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+  input[type=file] {
+    width: 100%; padding: 0; font: 13px var(--font); color: var(--fg);
+  }
+  input[type=file]::file-selector-button {
+    background: var(--surface-2); color: var(--fg-soft); border: 1.5px solid var(--line-strong);
+    border-radius: 8px 0 0 8px; padding: 10px 16px; font: 600 13px var(--font);
+    cursor: pointer; margin-right: 10px; transition: background .15s;
+  }
+  input[type=file]::file-selector-button:hover { background: var(--brand-soft); color: var(--brand-2); }
+  input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15); }
+  .field-with-help { display: grid; gap: 4px; }
+
+  /* ─────────────── buttons ─────────────── */
   button {
-    background: var(--brand); color: #fff; border: 0; padding: 0.65rem 1.25rem;
-    border-radius: 6px; font: 600 15px/1 inherit; cursor: pointer;
+    background: var(--brand); color: #fff; border: 0; padding: 12px 22px;
+    border-radius: 8px; font: 600 15px/1 var(--font); cursor: pointer;
+    transition: background .15s, transform .05s; letter-spacing: 0.01em;
   }
-  button:disabled { background: #8c959f; cursor: not-allowed; }
-  button.ghost { background: transparent; color: var(--brand); border: 1px solid var(--line); }
-  #status { padding: 1rem; border-radius: 8px; margin: 1rem 0; font-size: 14px; }
-  #status.idle { background: var(--soft); color: var(--muted); }
-  #status.busy { background: #fff8c5; color: var(--warn); border: 1px solid #d4a72c; }
-  #status.ok   { background: #dafbe1; color: var(--ok);   border: 1px solid var(--ok); }
-  #status.err  { background: #ffebe9; color: var(--err);  border: 1px solid var(--err); white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; }
-  #status .step { font-family: ui-monospace, monospace; font-size: 12px; opacity: 0.7; }
+  button:hover:not(:disabled) { background: var(--brand-2); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { background: #94a3b8; cursor: not-allowed; opacity: 0.7; }
+  button.ghost { background: transparent; color: var(--fg-soft); border: 1.5px solid var(--line-strong); }
+  button.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--fg); }
+
+  .actions { margin-top: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .actions .enginestatus {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--muted); font-size: 13px; margin-left: auto;
+  }
+  .actions .enginestatus.ready { color: var(--ok); font-weight: 600; }
+
+  /* ─────────────── engine boot progress ─────────────── */
+  #boot {
+    margin-bottom: 18px; padding: 16px 18px;
+    background: var(--brand-soft); border: 1px solid var(--brand-line);
+    border-radius: var(--radius); display: none;
+  }
+  #boot.visible { display: block; }
+  #boot .label { font-weight: 600; color: var(--brand-2); margin-bottom: 8px; font-size: 14px; }
+  #boot .label .spinner {
+    display: inline-block; width: 14px; height: 14px; border: 2px solid var(--brand-line);
+    border-top-color: var(--brand); border-radius: 50%; margin-right: 8px; vertical-align: -2px;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #boot .bar { width: 100%; height: 6px; background: var(--brand-line); border-radius: 999px; overflow: hidden; }
+  #boot .bar .fill { height: 100%; background: var(--brand); border-radius: 999px; width: 0%; transition: width .3s ease; }
+  #boot .step { margin-top: 8px; color: var(--fg-soft); font-size: 12.5px; font-family: var(--mono); }
+
+  /* ─────────────── status pill (idle / busy / ok / err) ─────────────── */
+  #status { padding: 14px 18px; border-radius: var(--radius); margin: 18px 0; font-size: 14px; line-height: 1.5; }
+  #status.idle { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+  #status.busy { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn-line); }
+  #status.ok   { background: var(--ok-soft);   color: var(--ok);   border: 1px solid var(--ok-line); }
+  #status.err  { background: var(--err-soft);  color: var(--err);  border: 1px solid var(--err-line);
+                 white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; max-height: 320px; overflow: auto; }
+  #status .step { font-family: var(--mono); font-size: 12px; opacity: 0.75; display: block; margin-top: 4px; }
+
+  /* ─────────────── result card (Markdown rendered) ─────────────── */
   #report {
-    margin-top: 2rem; padding: 1.5rem; background: var(--bg);
-    border: 1px solid var(--line); border-radius: 8px;
+    margin-top: 28px; padding: 28px 32px; background: var(--bg);
+    border: 1px solid var(--line); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
   }
-  #report h1 { font-size: 1.5rem; margin-top: 0; border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; }
-  #report h2 { font-size: 1.2rem; margin-top: 1.5rem; }
-  #report table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 13px; }
-  #report th, #report td { border: 1px solid var(--line); padding: 0.45rem 0.6rem; text-align: left; }
-  #report th { background: var(--soft); }
-  #report td[align=right], #report th[align=right] { text-align: right; }
-  #report blockquote { border-left: 4px solid #d4a72c; background: #fff8c5; padding: 0.5rem 1rem; margin: 1rem 0; color: #6e3d00; }
-  #report code { background: var(--soft); padding: 0.1em 0.3em; border-radius: 3px; font-size: 90%; }
-  footer { max-width: 900px; margin: 2rem auto 1rem; padding: 0 1rem; color: var(--muted); font-size: 12px; text-align: center; }
-  .disclaimer { background: #ffebe9; border: 1px solid var(--err); border-radius: 8px; padding: 0.75rem 1rem; margin: 1.5rem 0; font-size: 13px; color: #6f1319; }
-  .actions { margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-  .actions .hint { color: var(--muted); font-size: 12px; }
+  #report h1 { font-size: 24px; margin: 0 0 6px; padding-bottom: 10px; border-bottom: 2px solid var(--brand-line); }
+  #report h2 { font-size: 18px; margin: 24px 0 10px; color: var(--brand-2); }
+  #report h2:first-of-type { margin-top: 14px; }
+  #report p { margin: 8px 0; }
+  #report em { color: var(--muted); font-style: italic; }
+  #report table {
+    border-collapse: separate; border-spacing: 0; width: 100%;
+    margin: 12px 0 20px; font-size: 13.5px; border: 1px solid var(--line);
+    border-radius: 8px; overflow: hidden;
+  }
+  #report th { background: var(--surface-2); font-weight: 600; color: var(--fg); font-size: 12.5px; letter-spacing: 0.02em; text-transform: uppercase; }
+  #report th, #report td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  #report tr:last-child td { border-bottom: 0; }
+  #report tr:hover td { background: var(--surface); }
+  #report blockquote {
+    border-left: 4px solid var(--warn); background: var(--warn-soft);
+    padding: 10px 16px; margin: 14px 0; color: #78350f; border-radius: 0 6px 6px 0;
+  }
+  #report code { background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 90%; font-family: var(--mono); }
+  #report ul, #report ol { padding-left: 22px; }
+  #report li { margin: 4px 0; }
+  #report hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+
+  /* ─────────────── footer ─────────────── */
+  footer {
+    max-width: 980px; margin: 24px auto 32px; padding: 24px 20px;
+    color: var(--muted); font-size: 13px; border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: start;
+  }
+  footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
+  footer .small { font-size: 12px; max-width: 60ch; line-height: 1.55; }
+  @media (max-width: 720px) { footer { grid-template-columns: 1fr; } }
+
+  /* ─────────────── faq accordion ─────────────── */
+  details.faq {
+    background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 0; margin-bottom: 10px;
+  }
+  details.faq summary {
+    cursor: pointer; padding: 14px 18px; font-weight: 600; color: var(--fg);
+    list-style: none; position: relative; user-select: none;
+  }
+  details.faq summary::-webkit-details-marker { display: none; }
+  details.faq summary::after { content: '＋'; position: absolute; right: 18px; top: 14px; color: var(--muted); font-weight: 400; }
+  details.faq[open] summary::after { content: '−'; }
+  details.faq[open] summary { border-bottom: 1px solid var(--line); }
+  details.faq .body { padding: 14px 18px 18px; color: var(--fg-soft); font-size: 14px; line-height: 1.6; }
+  details.faq .body p:first-child { margin-top: 0; }
+  details.faq .body p:last-child  { margin-bottom: 0; }
+  details.faq .body code { background: var(--surface-2); padding: 1px 6px; border-radius: 4px; font-size: 90%; }
 </style>
 </head>
 <body>
-<header>
+
+<!-- Persistent legal disclaimer strip. Stays in view as the user scrolls. -->
+<div class="topstrip">
+  <strong>Educational tool · not investment / tax / legal advice.</strong>
+  Verify every plan with a Chartered Accountant before transacting.
+  <a href="#disclaimer">Full disclaimer ↓</a>
+</div>
+
+<header class="site">
   <div class="wrap">
-    <h1>tax-harvest</h1>
-    <p>Sec 112A LTCG redemption planner for Indian retail MF investors. Runs entirely in your browser.</p>
+    <div class="brand">
+      <h1>LTCG Harvest <span class="tag">India</span></h1>
+      <p>Section 112A long-term capital gains harvesting planner for Indian retail
+         mutual fund investors. Plan once a year, save up to <strong>₹15,625</strong>
+         in tax — for free, in your browser.</p>
+    </div>
+    <div class="meta">
+      <span class="pill">🔒 100% in-browser</span>
+      <span class="pill">★ MIT open source</span>
+    </div>
   </div>
 </header>
 
+<!-- Education strip — most users won't know what Sec 112A is. -->
+<section class="explainer" aria-label="Why this exists">
+  <div class="why">
+    <div class="icon">📜</div>
+    <h3>The ₹1.25 lakh free pass</h3>
+    <p>Every Indian FY, Sec 112A exempts the first ₹1,25,000 of your long-term equity / equity-MF gains from tax. Don't use it, lose it.</p>
+  </div>
+  <div class="why">
+    <div class="icon">📈</div>
+    <h3>Sell + rebuy = higher cost basis</h3>
+    <p>Harvesting books your gains at the exemption today, then you rebuy at today's price — the basis you'll be taxed on later is now higher. 12.5% saved forever.</p>
+  </div>
+  <div class="why">
+    <div class="icon">🤖</div>
+    <h3>This tool tells you what to sell</h3>
+    <p>Upload your CAS PDF. The tool replays every transaction, fetches current NAVs, and picks the exact units to redeem so booked LTCG lands at the exemption.</p>
+  </div>
+</section>
+
 <main>
-  <div class="privacy">
-    <strong>🔒 100% client-side. Nothing to install on your machine.</strong>
-    Your CAS PDF, password, and broker P&amp;L are processed in your browser via WebAssembly Python (Pyodide).
-    The Python runtime + tax-harvest engine are downloaded into your browser tab (sandboxed, cached after the first visit) —
-    nothing touches your OS, PATH, or filesystem; nothing is uploaded, logged, or sent to any server.
-    <a href="https://github.com/omptl/ltcg-harvest-india" target="_blank" rel="noopener">View source on GitHub →</a>
+
+  <div id="boot" aria-live="polite">
+    <div class="label"><span class="spinner"></span><span id="boot-label">Loading Python runtime into this browser tab…</span></div>
+    <div class="bar"><div class="fill" id="boot-fill"></div></div>
+    <div class="step" id="boot-step">First visit downloads ~15 MB. Cached after that — later runs are instant.</div>
   </div>
 
-  <div class="disclaimer">
-    <strong>⚠ Educational tool, not investment or tax advice.</strong>
-    This is automated arithmetic over your own statement. Verify with a Chartered Accountant before
-    transacting. NAV at execution will differ from the NAV shown in the plan.
-    Tax rules reflect the Indian Income Tax Act as understood at build time (post-Budget 2024).
-  </div>
+  <form id="form" novalidate>
 
-  <form id="form">
+    <!-- ─── Step 1: CAS ─── -->
     <div class="card">
-      <h2>1. Your CAS (Consolidated Account Statement)</h2>
-      <div class="grid cols-2">
+      <div class="head">
+        <span class="stepnum">1</span>
         <div>
-          <label for="cas">CAS PDF <span class="hint">required · from MF Central / CAMS / KFintech</span></label>
-          <input id="cas" type="file" accept="application/pdf" required>
+          <h2>Upload your CAS</h2>
+          <p class="sub">A <em>Detailed</em> Consolidated Account Statement, covering the longest period available.</p>
         </div>
-        <div>
-          <label for="pwd">PDF password <span class="hint">typically PAN uppercase, or PAN+DOB DDMMYYYY</span></label>
-          <input id="pwd" type="password" autocomplete="off" required>
+      </div>
+      <div class="grid cols-2">
+        <div class="field-with-help">
+          <label for="cas">CAS PDF <span class="hint">required</span></label>
+          <input id="cas" type="file" accept="application/pdf" required aria-describedby="cas-help">
+          <span id="cas-help" class="hint" style="font-size:12px;color:var(--muted);">
+            Get it from <a href="https://www.mfcentral.com" target="_blank" rel="noopener">MF Central</a> or
+            <a href="https://www.camsonline.com" target="_blank" rel="noopener">CAMSonline</a> — arrives by email in ~15 min.
+          </span>
+        </div>
+        <div class="field-with-help">
+          <label for="pwd">PDF password <span class="hint">required</span></label>
+          <input id="pwd" type="password" autocomplete="off" required aria-describedby="pwd-help">
+          <span id="pwd-help" class="hint" style="font-size:12px;color:var(--muted);">
+            Usually your PAN in <strong>UPPERCASE</strong>, or PAN + DOB as <code>DDMMYYYY</code>.
+            Never saved or sent anywhere.
+          </span>
         </div>
       </div>
     </div>
 
+    <!-- ─── Step 2: Stocks ─── -->
     <div class="card">
-      <h2>2. Stocks LTCG / LTCL this FY <span style="font-weight:400;color:var(--muted);font-size:0.85em">(optional but recommended)</span></h2>
-      <p style="margin:0 0 0.75rem 0;font-size:13px;color:var(--muted)">
-        The ₹1.25 L Sec 112A exemption is <strong>shared</strong> with listed equity LTCG.
-        If you've booked stock gains/losses this FY, fold them in so the MF plan stays correct.
-      </p>
-      <div class="grid cols-2">
+      <div class="head">
+        <span class="stepnum">2</span>
         <div>
-          <label for="stocks-ltcg">Stocks LTCG <span class="hint">₹ positive, this FY</span></label>
+          <h2>Stocks gains / losses this FY <span style="font-weight:400;color:var(--muted);font-size:0.85em">— optional, but matters</span></h2>
+          <p class="sub">
+            The ₹1.25 L exemption is <strong>shared</strong> with listed equity LTCG.
+            Booking ₹40K on stocks already? The MF plan must shrink to fit. Losses on
+            stocks actually <em>expand</em> the budget (they net off gains before the exemption).
+          </p>
+        </div>
+      </div>
+      <div class="grid cols-2">
+        <div class="field-with-help">
+          <label for="stocks-ltcg">Stocks LTCG total <span class="hint">₹ this FY</span></label>
           <input id="stocks-ltcg" type="number" min="0" step="0.01" placeholder="e.g. 26000">
         </div>
-        <div>
-          <label for="stocks-ltcl">Stocks LTCL <span class="hint">₹ positive number, this FY</span></label>
+        <div class="field-with-help">
+          <label for="stocks-ltcl">Stocks LTCL total <span class="hint">₹ positive number for losses</span></label>
           <input id="stocks-ltcl" type="number" min="0" step="0.01" placeholder="e.g. 32000">
         </div>
       </div>
-      <div style="margin-top:0.75rem">
-        <label for="ledger">Or upload broker tax P&amp;L <span class="hint">CSV (canonical schema) or Zerodha Console Excel (.xlsx) — long-term equity rows extracted automatically</span></label>
+      <div style="margin-top:14px" class="field-with-help">
+        <label for="ledger">Or upload broker tax-P&amp;L <span class="hint">CSV or Zerodha Console <code>.xlsx</code></span></label>
         <input id="ledger" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+        <span class="hint" style="font-size:12px;color:var(--muted);">
+          Long-term equity rows are extracted automatically. CSV columns:
+          <code>isin, symbol, buy_date, sell_date, quantity, buy_value, sell_value</code>.
+        </span>
       </div>
     </div>
 
+    <!-- ─── Step 3: Plan options ─── -->
     <div class="card">
-      <h2>3. Plan options</h2>
-      <div class="grid cols-2">
+      <div class="head">
+        <span class="stepnum">3</span>
         <div>
-          <label for="buffer">Safety buffer <span class="hint">% of budget held back to absorb NAV swing · default 1.5</span></label>
-          <input id="buffer" type="number" min="0" max="10" step="0.1" value="1.5">
+          <h2>Plan options</h2>
+          <p class="sub">The default safety buffer absorbs typical mid-cap intraday NAV swing — leave it at 1.5% unless you know why you're changing it.</p>
         </div>
-        <div>
-          <label for="fy">FY override <span class="hint">leave blank to auto-derive</span></label>
+      </div>
+      <div class="grid cols-2">
+        <div class="field-with-help">
+          <label for="buffer">Safety buffer <span class="hint">% of budget held back</span></label>
+          <input id="buffer" type="number" min="0" max="10" step="0.1" value="1.5">
+          <span class="hint" style="font-size:12px;color:var(--muted);">
+            Indian MFs are end-of-day priced; the NAV you transact at isn't known yet.
+            1.5% guards against overshoot.
+          </span>
+        </div>
+        <div class="field-with-help">
+          <label for="fy">FY override <span class="hint">blank = auto-derive</span></label>
           <input id="fy" type="text" placeholder="e.g. 2026-27">
+          <span class="hint" style="font-size:12px;color:var(--muted);">Indian FY runs Apr 1 → Mar 31.</span>
         </div>
       </div>
     </div>
 
     <div class="actions">
-      <button id="compute" type="submit" disabled>Compute plan</button>
+      <button id="compute" type="submit" disabled>Compute my harvest plan</button>
       <button id="reset" type="button" class="ghost">Reset</button>
-      <span class="hint" id="enginestatus">Engine loading into browser tab (first visit only)…</span>
+      <span class="enginestatus" id="enginestatus">Engine warming up…</span>
     </div>
   </form>
 
-  <div id="status" class="idle">Idle. Fill the form, then click Compute.</div>
+  <div id="status" class="idle">Fill the form above, then click <strong>Compute my harvest plan</strong>.</div>
 
   <div id="report" style="display:none"></div>
+
+  <!-- ─── FAQ ─── -->
+  <section style="margin-top:36px">
+    <h2 style="font-size:18px;margin:0 0 12px;color:var(--fg);">Frequently asked questions</h2>
+
+    <details class="faq">
+      <summary>Is my data really safe? Where does the PDF go?</summary>
+      <div class="body">
+        <p>It stays in your browser tab. There is no backend server — no PHP, no Node, no API.
+           The page is plain static HTML hosted on GitHub Pages. When you select a file, the
+           browser hands the bytes to a Python interpreter (Pyodide) running inside the tab's
+           WebAssembly sandbox. We read it, compute the plan, and render the result. The PDF,
+           password, and plan never leave your device.</p>
+        <p>Verify it yourself: open DevTools → Network tab → upload your file → click Compute.
+           You'll see fetches to GitHub's CDN for the runtime + the static NAV file, and zero
+           outbound requests carrying your data.</p>
+      </div>
+    </details>
+
+    <details class="faq">
+      <summary>How accurate is the plan?</summary>
+      <div class="body">
+        <p>The arithmetic is exact for the lots in your CAS. <strong>What's not exact is the
+           NAV you'll transact at</strong> — Indian MFs publish closing NAV after market hours,
+           so any order you place today gets today's EOD NAV (declared tonight ~9 PM IST), not
+           the NAV in the plan (which is yesterday's). Mid-cap funds typically move ±1–2%
+           intraday. The default 1.5% safety buffer is sized to absorb this so booked LTCG
+           stays inside the exemption.</p>
+        <p>Always spot-check the unit counts on your AMC portal before placing orders.</p>
+      </div>
+    </details>
+
+    <details class="faq">
+      <summary>I don't see my fund in the recommendations. Why?</summary>
+      <div class="body">
+        <p>A few reasons it might be excluded:</p>
+        <ul>
+          <li><strong>Held &lt; 1 year</strong> — not eligible for LTCG yet. Wait it out.</li>
+          <li><strong>ELSS in 3-yr lock-in</strong> or solution-oriented fund in 5-yr lock-in.</li>
+          <li><strong>NAV not on the AMFI feed</strong> — newly launched or suspended scheme.</li>
+          <li><strong>Smaller gain-per-unit</strong> — the algorithm prefers high gain/unit lots so it can hit the budget while moving fewer units.</li>
+        </ul>
+        <p>The Warnings section in your report lists every excluded scheme with the reason.</p>
+      </div>
+    </details>
+
+    <details class="faq">
+      <summary>What about NSDL / CDSL demat-only CAS?</summary>
+      <div class="body">
+        <p>This browser build handles CAMS, KFintech, and MF Central PDFs (the broadest
+           coverage). NSDL/CDSL demat-only CAS needs an additional 50 MB SQLite ISIN
+           database that won't fit in the browser bundle — for those, use the
+           <a href="https://github.com/omptl/ltcg-harvest-india" target="_blank" rel="noopener">CLI</a>.</p>
+      </div>
+    </details>
+
+    <details class="faq">
+      <summary>Why is the first load so slow?</summary>
+      <div class="body">
+        <p>The browser downloads a Python runtime (~10 MB), a slim ISIN database (~3 MB),
+           and today's AMFI NAV snapshot (~2 MB) — about 15 MB total, all from GitHub's CDN.
+           Your browser caches them, so the next time you open this page it's instant.
+           No Python or pip is installed on your operating system.</p>
+      </div>
+    </details>
+
+    <details class="faq">
+      <summary>How does the safety buffer trade off against unused exemption?</summary>
+      <div class="body">
+        <p>A 1.5% buffer on a ₹1.25 L budget = ₹1,875 of exemption held back. If NAV moves
+           &lt; 1.5% adversely between plan time and execution, your booked LTCG stays
+           inside the exemption (zero tax). If NAV moves favourably you "leave" up to
+           ₹1,875 on the table — you can claw that back tomorrow with a small top-up
+           redemption against the now-known NAV. Pick 0% for max exemption + small
+           overshoot risk; 2% for extra conservatism.</p>
+      </div>
+    </details>
+
+    <details class="faq">
+      <summary>I found a bug / want to add a broker. How do I contribute?</summary>
+      <div class="body">
+        <p>Open an issue or PR on
+           <a href="https://github.com/omptl/ltcg-harvest-india" target="_blank" rel="noopener">GitHub</a>.
+           For broker tax-P&L formats other than Zerodha, the column mapping lives in
+           <code>web/index.html → HEADER_MAP</code>. Adding a new broker is usually one
+           dict entry. See <code>CONTRIBUTING.md</code> for the dev setup.</p>
+      </div>
+    </details>
+  </section>
 </main>
 
-<footer>
-  tax-harvest · MIT licensed · open source ·
-  <a href="https://github.com/omptl/ltcg-harvest-india" target="_blank" rel="noopener">GitHub</a> ·
-  <a href="https://github.com/omptl/ltcg-harvest-india/blob/main/README.md" target="_blank" rel="noopener">Docs</a>
+<footer id="disclaimer">
+  <div>
+    <strong>Full disclaimer</strong>
+    <p class="small" style="margin-top:6px">
+      This is a free, open-source educational calculator. The author is <strong>not</strong>
+      a SEBI-registered investment adviser or a Chartered Accountant. The tool performs
+      arithmetic over data you supply, according to the author's reading of the Income
+      Tax Act (post-Budget 2024). Tax rules change; AMCs may classify schemes differently;
+      NAVs at execution differ from NAVs at analysis. Always verify the recommended units
+      against your AMC portal and consult a CA before transacting. The author accepts no
+      liability for losses arising from the use of this tool.
+    </p>
+  </div>
+  <div class="links">
+    <a href="https://github.com/omptl/ltcg-harvest-india" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/omptl/ltcg-harvest-india/blob/main/README.md" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/omptl/ltcg-harvest-india/blob/main/LICENSE" target="_blank" rel="noopener">License (MIT)</a>
+    <a href="https://github.com/omptl/ltcg-harvest-india/issues" target="_blank" rel="noopener">Report a bug</a>
+  </div>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/pyodide/v0.29.4/full/pyodide.js"></script>
@@ -199,22 +561,50 @@ const statusEl = $('#status');
 const reportEl = $('#report');
 const engineStatusEl = $('#enginestatus');
 const computeBtn = $('#compute');
+const bootEl = $('#boot');
+const bootLabelEl = $('#boot-label');
+const bootFillEl = $('#boot-fill');
+const bootStepEl = $('#boot-step');
 
 function setStatus(cls, msg, step) {
   statusEl.className = cls;
   statusEl.innerHTML = msg + (step ? `<br><span class="step">${step}</span>` : '');
 }
 
+// Boot-progress UI — shows a labelled progress bar while the engine warms up,
+// then collapses after the first successful boot. Steps below sum to 100.
+const BOOT_STEPS = [
+  { pct: 18, label: 'Loading Python runtime…',           note: 'Pyodide 0.29.4 — sandboxed inside this browser tab.' },
+  { pct: 30, label: 'Loading C-extension wheels…',       note: 'micropip + cryptography for encrypted PDFs.' },
+  { pct: 60, label: 'Installing CAS parser…',            note: 'casparser + pure-Python ISIN database (no rapidfuzz needed in browser).' },
+  { pct: 78, label: 'Installing tax-harvest engine…',    note: 'Same Python engine as the CLI.' },
+  { pct: 95, label: 'Loading NAV + FMV + ISIN data…',    note: 'Mirrored daily from AMFI by a GitHub Actions cron.' },
+  { pct:100, label: 'Engine ready',                      note: 'Cached — next visit will be instant.' },
+];
+function bootStep(i) {
+  const s = BOOT_STEPS[i]; if (!s) return;
+  bootEl.classList.add('visible');
+  bootLabelEl.textContent = s.label;
+  bootStepEl.textContent  = s.note;
+  bootFillEl.style.width  = s.pct + '%';
+}
+function bootDone() {
+  setTimeout(() => bootEl.classList.remove('visible'), 600);
+}
+
 let pyodide = null;
 let engineReady = false;
 
 async function bootEngine() {
+  bootStep(0);
   setStatus('busy', '⏳ Loading Python runtime into this browser tab…', 'Pyodide bundle ~10 MB, sandboxed in the tab, cached after first visit. Nothing installs on your machine.');
   pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.4/full/' });
 
+  bootStep(1);
   setStatus('busy', '⏳ Loading C-extension wheels…', 'micropip + cryptography');
   await pyodide.loadPackage(['micropip', 'cryptography']);
 
+  bootStep(2);
   setStatus('busy', '⏳ Installing CAS parser…', 'Patching out rapidfuzz; installing casparser + deps');
   await pyodide.runPythonAsync(`
 import os, sys
@@ -327,6 +717,7 @@ await micropip.install([
 await micropip.install('casparser', deps=False)
 `);
 
+  bootStep(3);
   setStatus('busy', '⏳ Installing tax-harvest engine…', 'Local wheel');
   // Get current page URL base so wheel + data files load from same origin.
   const base = new URL('.', window.location.href).href;
@@ -336,6 +727,7 @@ await micropip.install("${base}data/tax_harvest-0.1.0-py3-none-any.whl")
 import tax_harvest
 `);
 
+  bootStep(4);
   setStatus('busy', '⏳ Loading NAV + FMV snapshots + ISIN DB…', 'Mirrored daily from AMFI; ISIN DB shipped statically');
   // Pre-populate Pyodide FS at the paths the engine expects.
   pyodide.runPython("import os; os.makedirs('cache', exist_ok=True)");
@@ -356,9 +748,12 @@ import tax_harvest
   pyodide.FS.writeFile('cache/isin_db.json', isinText);
 
   engineReady = true;
+  bootStep(5);
+  bootDone();
   engineStatusEl.textContent = '✓ Engine ready';
+  engineStatusEl.classList.add('ready');
   computeBtn.disabled = false;
-  setStatus('idle', '✓ Engine loaded. Fill the form above, then click Compute.');
+  setStatus('idle', '✓ Engine loaded. Fill the form above, then click <strong>Compute my harvest plan</strong>.');
 }
 
 async function readFileAsBytes(file) {
@@ -656,11 +1051,14 @@ $('#form').addEventListener('submit', runPlan);
 $('#reset').addEventListener('click', () => {
   $('#form').reset();
   reportEl.style.display = 'none';
-  setStatus('idle', 'Reset. Fill the form, then click Compute.');
+  setStatus('idle', 'Reset. Fill the form above, then click <strong>Compute my harvest plan</strong>.');
 });
 
 bootEngine().catch(e => {
-  setStatus('err', 'Engine boot failed:\n' + (e.message || e.toString()));
+  bootEl.classList.remove('visible');
+  setStatus('err', 'Engine boot failed:\n' + (e.message || e.toString()) +
+    '\n\nTip: try a hard reload (Ctrl+Shift+R). If it persists, check your internet — the runtime is fetched from a CDN.');
+  engineStatusEl.textContent = '✗ Engine boot failed';
   console.error(e);
 });
 </script>
