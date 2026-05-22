@@ -153,8 +153,8 @@
         </div>
       </div>
       <div style="margin-top:0.75rem">
-        <label for="ledger">Or upload per-trade CSV <span class="hint">columns: isin, symbol, buy_date, sell_date, quantity, buy_value, sell_value</span></label>
-        <input id="ledger" type="file" accept=".csv,text/csv">
+        <label for="ledger">Or upload broker tax P&amp;L <span class="hint">CSV (canonical schema) or Zerodha Console Excel (.xlsx) — long-term equity rows extracted automatically</span></label>
+        <input id="ledger" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
       </div>
     </div>
 
@@ -365,6 +365,121 @@ async function readFileAsBytes(file) {
 }
 async function readFileAsText(file) { return await file.text(); }
 
+let openpyxlReady = false;
+async function ensureOpenpyxl() {
+  if (openpyxlReady) return;
+  // openpyxl + et_xmlfile are pure-Python on PyPI; install lazily on the first
+  // .xlsx upload so the initial page load stays light. Also writes the
+  // scripts_xlsx_adapter module that knows the Zerodha tax-P&L sheet layout.
+  await pyodide.runPythonAsync(`
+import micropip
+await micropip.install('openpyxl')
+import os, sys
+stub_dir = next(p for p in sys.path if p.endswith('site-packages'))
+with open(os.path.join(stub_dir, 'scripts_xlsx_adapter.py'), 'w') as f:
+    f.write("""\
+'''Extract long-term equity rows from a broker tax-P&L Excel into the
+canonical CSV schema tax_harvest.stocks expects.
+
+Supported out of the box: Zerodha Console (Tradewise Exits sheet, the
+'Equity - Long Term' section). Other brokers usually structure their
+exports similarly — the heuristic scans every sheet for a row whose
+first non-empty cell is 'Equity - Long Term', then reads the next
+header row and the following data rows until the next section marker.
+'''
+import csv, openpyxl
+from datetime import datetime
+
+# Column-name → canonical-name mapping. Add aliases as new brokers appear.
+HEADER_MAP = {
+    'symbol': 'symbol',
+    'isin': 'isin',
+    'entry date': 'buy_date',
+    'buy date': 'buy_date',
+    'exit date': 'sell_date',
+    'sell date': 'sell_date',
+    'quantity': 'quantity',
+    'qty': 'quantity',
+    'buy value': 'buy_value',
+    'sell value': 'sell_value',
+}
+CANONICAL = ['isin', 'symbol', 'buy_date', 'sell_date', 'quantity', 'buy_value', 'sell_value']
+
+def _date(v):
+    if hasattr(v, 'strftime'):
+        return v.strftime('%Y-%m-%d')
+    if v is None:
+        return ''
+    s = str(v).strip()
+    for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%d-%b-%Y'):
+        try: return datetime.strptime(s, fmt).strftime('%Y-%m-%d')
+        except ValueError: continue
+    return s
+
+def xlsx_to_canonical_csv(src_path, dst_path):
+    wb = openpyxl.load_workbook(src_path, data_only=True)
+    rows_out = []
+    section_markers = ('equity - long term',)
+    stop_markers = ('equity - buyback', 'equity - intraday', 'equity - short term',
+                     'non equity', 'mutual funds', 'f&o', 'currency', 'commodity')
+    for sn in wb.sheetnames:
+        ws = wb[sn]
+        in_section = False
+        header_idx = None  # column-name → column-number for the active section
+        for row in ws.iter_rows(values_only=True):
+            first = next((str(c).strip().lower() for c in row if c is not None), '')
+            if not first:
+                continue
+            if any(m in first for m in section_markers):
+                in_section = True
+                header_idx = None
+                continue
+            if in_section and any(first.startswith(m) for m in stop_markers):
+                in_section = False
+                continue
+            if not in_section:
+                continue
+            # First non-empty row inside the section after the marker is the header.
+            if header_idx is None:
+                header_idx = {}
+                for i, c in enumerate(row):
+                    if c is None: continue
+                    key = HEADER_MAP.get(str(c).strip().lower())
+                    if key:
+                        header_idx[key] = i
+                missing = set(CANONICAL) - set(header_idx)
+                if missing:
+                    # Not the header we expect — likely a sub-heading; keep scanning.
+                    header_idx = None
+                continue
+            # Data row.
+            try:
+                rec = {k: row[header_idx[k]] for k in CANONICAL}
+            except IndexError:
+                continue
+            if rec['symbol'] is None or rec['quantity'] in (None, ''):
+                continue
+            rec['buy_date']  = _date(rec['buy_date'])
+            rec['sell_date'] = _date(rec['sell_date'])
+            rec['quantity']  = float(rec['quantity'])
+            rec['buy_value']  = float(rec['buy_value'] or 0)
+            rec['sell_value'] = float(rec['sell_value'] or 0)
+            rec['isin']   = str(rec['isin'] or '').strip()
+            rec['symbol'] = str(rec['symbol']).strip()
+            rows_out.append(rec)
+
+    with open(dst_path, 'w', encoding='utf-8', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=CANONICAL)
+        w.writeheader()
+        for r in rows_out:
+            w.writerow(r)
+    gain = sum(r['sell_value'] - r['buy_value'] for r in rows_out)
+    return f'Extracted {len(rows_out)} long-term equity rows. Aggregate gain: Rs {gain:,.2f} (LTCG/LTCL netting happens next).'
+""")
+`);
+  openpyxlReady = true;
+}
+
 async function runPlan(evt) {
   evt.preventDefault();
   if (!engineReady) return;
@@ -389,9 +504,26 @@ async function runPlan(evt) {
     pyodide.FS.writeFile('/tmp/cas.pdf', casBytes);
     let ledgerPathArg = 'None';
     if (ledgerFile) {
-      const csvText = await readFileAsText(ledgerFile);
-      pyodide.FS.writeFile('/tmp/stocks.csv', csvText);
-      ledgerPathArg = "Path('/tmp/stocks.csv')";
+      const lower = ledgerFile.name.toLowerCase();
+      if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+        setStatus('busy', '⏳ Extracting long-term equity rows from Excel…', 'Installing openpyxl on first use');
+        await ensureOpenpyxl();
+        const xlsxBytes = await readFileAsBytes(ledgerFile);
+        pyodide.FS.writeFile('/tmp/stocks.xlsx', xlsxBytes);
+        const summary = await pyodide.runPythonAsync(`
+from scripts_xlsx_adapter import xlsx_to_canonical_csv
+xlsx_to_canonical_csv('/tmp/stocks.xlsx', '/tmp/stocks.csv')
+`);
+        console.log('[xlsx adapter]', summary);
+        setStatus('busy', '⏳ Running the harvest pipeline…', summary);
+        ledgerPathArg = "Path('/tmp/stocks.csv')";
+      } else {
+        const csvText = await readFileAsText(ledgerFile);
+        pyodide.FS.writeFile('/tmp/stocks.csv', csvText);
+        ledgerPathArg = "Path('/tmp/stocks.csv')";
+      }
+    } else {
+      setStatus('busy', '⏳ Running the harvest pipeline…', 'Parsing CAS · evaluating lots · building plan');
     }
 
     // Bind inputs into the Python namespace then run the pipeline.

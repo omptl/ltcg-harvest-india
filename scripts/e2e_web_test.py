@@ -12,7 +12,7 @@ from playwright.async_api import async_playwright
 
 CAS_PATH = r"C:/Users/ompatel.j/Downloads/CAS_01012011-22052026_***REDACTED***_22052026125947128.pdf"
 CAS_PASSWORD = "***REDACTED-PASSWORD***"
-STOCKS_CSV = r"C:/Projects/prod/MFHarvest/cache/stocks_ledger_fy2627.csv"
+STOCKS_CSV = r"C:/Users/ompatel.j/Downloads/taxpnl-***REDACTED***-2026_2027-Q1-Q1.xlsx"
 URL = "http://localhost:8000/index.html"
 SHOT = r"C:/tmp/web_e2e.png"
 
