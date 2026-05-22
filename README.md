@@ -1,16 +1,21 @@
-# tax-harvest
+# LTCG Harvest India — Section 112A mutual fund tax planner
 
-Personal CLI for an Indian retail investor to identify which mutual fund
-units to redeem each financial year to harvest LTCG up to the ₹1,25,000
-exemption under **Section 112A**.
+Free, open-source tool for Indian retail mutual fund investors to identify
+which units to redeem each financial year so booked long-term capital gains
+land inside the ₹1,25,000 **Section 112A** exemption. Saves the 12.5% LTCG
+tax that would otherwise apply later.
 
-Single-user, runs locally, no server, no PII leaves the machine.
+Two surfaces — same engine, same outputs:
+- **In-browser** (no install): https://omptl.github.io/ltcg-harvest-india/
+- **CLI** (`tax-harvest`): for local use or driving from an AI coding agent.
+
+Single-user, runs locally, no server, no PII leaves the machine. MIT licensed.
 
 ---
 
 ## 🌐 Try it in your browser — no install
 
-A 100% client-side build runs on GitHub Pages: **https://omptl.github.io/MFHarvest/**
+A 100% client-side build runs on GitHub Pages: **https://omptl.github.io/ltcg-harvest-india/**
 
 - Your CAS PDF, password, and broker P&L are processed **in your browser**
   via WebAssembly Python (Pyodide). Nothing is uploaded, logged, or sent

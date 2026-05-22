@@ -2,9 +2,46 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>tax-harvest — Sec 112A LTCG planner (in-browser)</title>
+<title>LTCG Harvest India — Section 112A Mutual Fund Tax Harvesting Calculator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Personal Indian mutual fund LTCG harvesting calculator. Runs 100% in your browser — no data leaves your machine.">
+<meta name="description" content="Free in-browser tool for Indian retail mutual fund investors to plan Section 112A LTCG harvesting up to the ₹1.25 lakh annual exemption. Reads your CAS PDF locally, never uploads anything. Open source.">
+<meta name="keywords" content="LTCG harvesting India, Section 112A calculator, mutual fund tax harvesting, CAS PDF reader, equity LTCG exemption, 1.25 lakh exemption, Indian capital gains, MF redemption planner">
+<meta name="author" content="omptl">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://omptl.github.io/ltcg-harvest-india/">
+
+<!-- Open Graph (LinkedIn, WhatsApp, etc.) -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="LTCG Harvest India — Section 112A Mutual Fund Tax Harvesting Calculator">
+<meta property="og:description" content="Plan your annual ₹1.25 L Section 112A LTCG harvest from your CAS PDF. 100% in-browser, no data uploaded.">
+<meta property="og:url" content="https://omptl.github.io/ltcg-harvest-india/">
+<meta property="og:site_name" content="LTCG Harvest India">
+
+<!-- Twitter card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="LTCG Harvest India — Section 112A Tax Harvesting">
+<meta name="twitter:description" content="Free, open-source, browser-side calculator for Indian MF LTCG harvesting under Section 112A.">
+
+<!-- JSON-LD structured data (helps AEO / LLM discovery + Google rich results) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "LTCG Harvest India",
+  "applicationCategory": "FinanceApplication",
+  "operatingSystem": "Any (browser)",
+  "url": "https://omptl.github.io/ltcg-harvest-india/",
+  "description": "Free in-browser calculator for Indian Section 112A long-term capital gains (LTCG) tax harvesting on equity mutual funds. Reads CAS PDF (CAMS / KFintech / MF Central), applies Sec 50AA + grandfathering, nets stocks LTCG/LTCL, recommends per-scheme units to redeem within the ₹1.25 lakh annual exemption.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
+  "isAccessibleForFree": true,
+  "license": "https://opensource.org/licenses/MIT",
+  "softwareVersion": "0.1.0",
+  "author": { "@type": "Person", "name": "omptl" },
+  "audience": { "@type": "Audience", "audienceType": "Indian retail mutual fund investors" },
+  "keywords": "Section 112A, LTCG, mutual fund, tax harvesting, India, CAS PDF, ₹1.25 lakh exemption, Sec 50AA, grandfathering"
+}
+</script>
+
 <style>
   :root {
     --fg: #1f2328; --muted: #6b7280; --bg: #ffffff; --soft: #f6f8fa;
@@ -74,7 +111,7 @@
     <strong>🔒 100% client-side.</strong>
     Your CAS PDF, password, and broker P&L are processed in your browser via WebAssembly Python (Pyodide).
     Nothing is uploaded, logged, or sent to any server.
-    <a href="https://github.com/omptl/MFHarvest" target="_blank" rel="noopener">View source on GitHub →</a>
+    <a href="https://github.com/omptl/ltcg-harvest-india" target="_blank" rel="noopener">View source on GitHub →</a>
   </div>
 
   <div class="disclaimer">
@@ -149,8 +186,8 @@
 
 <footer>
   tax-harvest · MIT licensed · open source ·
-  <a href="https://github.com/omptl/MFHarvest" target="_blank" rel="noopener">GitHub</a> ·
-  <a href="https://github.com/omptl/MFHarvest/blob/main/README.md" target="_blank" rel="noopener">Docs</a>
+  <a href="https://github.com/omptl/ltcg-harvest-india" target="_blank" rel="noopener">GitHub</a> ·
+  <a href="https://github.com/omptl/ltcg-harvest-india/blob/main/README.md" target="_blank" rel="noopener">Docs</a>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/pyodide/v0.29.4/full/pyodide.js"></script>
