@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>tax-harvest — Sec 112A LTCG planner (in-browser)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Personal Indian mutual fund LTCG harvesting calculator. Runs 100% in your browser — no data leaves your machine.">
+<style>
+  :root {
+    --fg: #1f2328; --muted: #6b7280; --bg: #ffffff; --soft: #f6f8fa;
+    --line: #d0d7de; --brand: #1f6feb; --ok: #1a7f37; --warn: #9a6700;
+    --err: #d1242f;
+  }
+  * { box-sizing: border-box; }
+  body { font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); margin: 0; background: var(--bg); }
+  header { background: var(--soft); border-bottom: 1px solid var(--line); padding: 1.5rem 1rem; }
+  header .wrap { max-width: 900px; margin: 0 auto; }
+  header h1 { margin: 0 0 0.25rem 0; font-size: 1.6rem; }
+  header p { margin: 0; color: var(--muted); }
+  main { max-width: 900px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+  .privacy { background: #ddf4ff; border: 1px solid #54aeff; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; font-size: 14px; }
+  .privacy strong { color: var(--brand); }
+  .card { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+  .card h2 { margin: 0 0 0.75rem 0; font-size: 1.1rem; }
+  .grid { display: grid; gap: 0.75rem; }
+  .grid.cols-2 { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 600px) { .grid.cols-2 { grid-template-columns: 1fr; } }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 0.25rem; color: var(--fg); }
+  label .hint { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 0.4em; }
+  input[type=text], input[type=password], input[type=number], input[type=file] {
+    width: 100%; padding: 0.5rem 0.6rem; border: 1px solid var(--line); border-radius: 6px; font: inherit;
+  }
+  input:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+  button {
+    background: var(--brand); color: #fff; border: 0; padding: 0.65rem 1.25rem;
+    border-radius: 6px; font: 600 15px/1 inherit; cursor: pointer;
+  }
+  button:disabled { background: #8c959f; cursor: not-allowed; }
+  button.ghost { background: transparent; color: var(--brand); border: 1px solid var(--line); }
+  #status { padding: 1rem; border-radius: 8px; margin: 1rem 0; font-size: 14px; }
+  #status.idle { background: var(--soft); color: var(--muted); }
+  #status.busy { background: #fff8c5; color: var(--warn); border: 1px solid #d4a72c; }
+  #status.ok   { background: #dafbe1; color: var(--ok);   border: 1px solid var(--ok); }
+  #status.err  { background: #ffebe9; color: var(--err);  border: 1px solid var(--err); white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; }
+  #status .step { font-family: ui-monospace, monospace; font-size: 12px; opacity: 0.7; }
+  #report {
+    margin-top: 2rem; padding: 1.5rem; background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px;
+  }
+  #report h1 { font-size: 1.5rem; margin-top: 0; border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; }
+  #report h2 { font-size: 1.2rem; margin-top: 1.5rem; }
+  #report table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 13px; }
+  #report th, #report td { border: 1px solid var(--line); padding: 0.45rem 0.6rem; text-align: left; }
+  #report th { background: var(--soft); }
+  #report td[align=right], #report th[align=right] { text-align: right; }
+  #report blockquote { border-left: 4px solid #d4a72c; background: #fff8c5; padding: 0.5rem 1rem; margin: 1rem 0; color: #6e3d00; }
+  #report code { background: var(--soft); padding: 0.1em 0.3em; border-radius: 3px; font-size: 90%; }
+  footer { max-width: 900px; margin: 2rem auto 1rem; padding: 0 1rem; color: var(--muted); font-size: 12px; text-align: center; }
+  .disclaimer { background: #ffebe9; border: 1px solid var(--err); border-radius: 8px; padding: 0.75rem 1rem; margin: 1.5rem 0; font-size: 13px; color: #6f1319; }
+  .actions { margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+  .actions .hint { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>tax-harvest</h1>
+    <p>Sec 112A LTCG redemption planner for Indian retail MF investors. Runs entirely in your browser.</p>
+  </div>
+</header>
+
+<main>
+  <div class="privacy">
+    <strong>🔒 100% client-side.</strong>
+    Your CAS PDF, password, and broker P&L are processed in your browser via WebAssembly Python (Pyodide).
+    Nothing is uploaded, logged, or sent to any server.
+    <a href="https://github.com/omptl/MFHarvest" target="_blank" rel="noopener">View source on GitHub →</a>
+  </div>
+
+  <div class="disclaimer">
+    <strong>⚠ Educational tool, not investment or tax advice.</strong>
+    This is automated arithmetic over your own statement. Verify with a Chartered Accountant before
+    transacting. NAV at execution will differ from the NAV shown in the plan.
+    Tax rules reflect the Indian Income Tax Act as understood at build time (post-Budget 2024).
+  </div>
+
+  <form id="form">
+    <div class="card">
+      <h2>1. Your CAS (Consolidated Account Statement)</h2>
+      <div class="grid cols-2">
+        <div>
+          <label for="cas">CAS PDF <span class="hint">required · from MF Central / CAMS / KFintech</span></label>
+          <input id="cas" type="file" accept="application/pdf" required>
+        </div>
+        <div>
+          <label for="pwd">PDF password <span class="hint">typically PAN uppercase, or PAN+DOB DDMMYYYY</span></label>
+          <input id="pwd" type="password" autocomplete="off" required>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. Stocks LTCG / LTCL this FY <span style="font-weight:400;color:var(--muted);font-size:0.85em">(optional but recommended)</span></h2>
+      <p style="margin:0 0 0.75rem 0;font-size:13px;color:var(--muted)">
+        The ₹1.25 L Sec 112A exemption is <strong>shared</strong> with listed equity LTCG.
+        If you've booked stock gains/losses this FY, fold them in so the MF plan stays correct.
+      </p>
+      <div class="grid cols-2">
+        <div>
+          <label for="stocks-ltcg">Stocks LTCG <span class="hint">₹ positive, this FY</span></label>
+          <input id="stocks-ltcg" type="number" min="0" step="0.01" placeholder="e.g. 26000">
+        </div>
+        <div>
+          <label for="stocks-ltcl">Stocks LTCL <span class="hint">₹ positive number, this FY</span></label>
+          <input id="stocks-ltcl" type="number" min="0" step="0.01" placeholder="e.g. 32000">
+        </div>
+      </div>
+      <div style="margin-top:0.75rem">
+        <label for="ledger">Or upload per-trade CSV <span class="hint">columns: isin, symbol, buy_date, sell_date, quantity, buy_value, sell_value</span></label>
+        <input id="ledger" type="file" accept=".csv,text/csv">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3. Plan options</h2>
+      <div class="grid cols-2">
+        <div>
+          <label for="buffer">Safety buffer <span class="hint">% of budget held back to absorb NAV swing · default 1.5</span></label>
+          <input id="buffer" type="number" min="0" max="10" step="0.1" value="1.5">
+        </div>
+        <div>
+          <label for="fy">FY override <span class="hint">leave blank to auto-derive</span></label>
+          <input id="fy" type="text" placeholder="e.g. 2026-27">
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="compute" type="submit" disabled>Compute plan</button>
+      <button id="reset" type="button" class="ghost">Reset</button>
+      <span class="hint" id="enginestatus">Engine loading…</span>
+    </div>
+  </form>
+
+  <div id="status" class="idle">Idle. Fill the form, then click Compute.</div>
+
+  <div id="report" style="display:none"></div>
+</main>
+
+<footer>
+  tax-harvest · MIT licensed · open source ·
+  <a href="https://github.com/omptl/MFHarvest" target="_blank" rel="noopener">GitHub</a> ·
+  <a href="https://github.com/omptl/MFHarvest/blob/main/README.md" target="_blank" rel="noopener">Docs</a>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.29.4/full/pyodide.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@14.1.3/marked.min.js"></script>
+<script>
+const $ = sel => document.querySelector(sel);
+const statusEl = $('#status');
+const reportEl = $('#report');
+const engineStatusEl = $('#enginestatus');
+const computeBtn = $('#compute');
+
+function setStatus(cls, msg, step) {
+  statusEl.className = cls;
+  statusEl.innerHTML = msg + (step ? `<br><span class="step">${step}</span>` : '');
+}
+
+let pyodide = null;
+let engineReady = false;
+
+async function bootEngine() {
+  setStatus('busy', '⏳ Loading Python runtime…', 'Pyodide bundle ~10 MB, cached after first load');
+  pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.4/full/' });
+
+  setStatus('busy', '⏳ Loading C-extension wheels…', 'micropip + cryptography');
+  await pyodide.loadPackage(['micropip', 'cryptography']);
+
+  setStatus('busy', '⏳ Installing CAS parser…', 'Patching out rapidfuzz; installing casparser + deps');
+  await pyodide.runPythonAsync(`
+import os, sys
+stub_dir = next(p for p in sys.path if p.endswith('site-packages'))
+pkg_dir = os.path.join(stub_dir, 'casparser_isin')
+os.makedirs(pkg_dir, exist_ok=True)
+with open(os.path.join(pkg_dir, '__init__.py'), 'w') as f:
+    f.write("""\
+# Pyodide build of casparser_isin — pure-Python replacement for the SQLite +
+# rapidfuzz implementation. Loads a static JSON dump of the scheme table
+# (web/data/isin_db.json) and does exact dict lookups by ISIN and by
+# (rta, rta_code). Skips the fuzzy name-match path because rapidfuzz has no
+# Pyodide wheel. For CAS PDFs that include ISINs (the common case for CAMS,
+# KFin, MF Central statements), this produces identical results to the real
+# casparser_isin library.
+import json, re
+from typing import NamedTuple, Optional
+from pathlib import Path
+
+_DB_PATH = Path('cache/isin_db.json')  # written by JS into pyodide FS before parse
+_DB = None
+
+def _load():
+    global _DB
+    if _DB is None:
+        if not _DB_PATH.exists():
+            _DB = {'isin_to': {}, 'rta_to_isin': {}}
+        else:
+            _DB = json.loads(_DB_PATH.read_text(encoding='utf-8'))
+    return _DB
+
+RTA_MAP = {
+    'CAMS': 'CAMS', 'FTAMIL': 'FRANKLIN', 'FRANKLIN': 'FRANKLIN',
+    'KFINTECH': 'KARVY', 'KARVY': 'KARVY',
+}
+
+class SchemeData(NamedTuple):
+    name: str
+    isin: str
+    amfi_code: str
+    type: str
+    score: int
+
+class _Base:
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+
+class MFISINDb(_Base):
+    def direct_isin_lookup(self, isin):
+        db = _load()
+        rec = db['isin_to'].get(isin)
+        if not rec: return []
+        amfi_code, type_, name = rec
+        return [{'name': name, 'isin': isin, 'amfi_code': amfi_code, 'type': type_}]
+
+    def scheme_lookup(self, rta, scheme_name, rta_code):
+        db = _load()
+        if rta_code:
+            rta_code = re.sub(r'\\s+', '', rta_code)
+        mapped = RTA_MAP.get((rta or '').upper(), '')
+        key = f'{mapped}|{rta_code or \"\"}'
+        isin = db['rta_to_isin'].get(key)
+        if not isin:
+            # Trim trailing char (casparser does this fallback)
+            if rta_code and len(rta_code) > 1:
+                isin = db['rta_to_isin'].get(f'{mapped}|{rta_code[:-1]}')
+        if not isin: return []
+        return self.direct_isin_lookup(isin)
+
+    def isin_lookup(self, scheme_name, rta, rta_code, isin=None, min_score=60):
+        if not (isinstance(scheme_name, str) and isinstance(rta, str) and isinstance(rta_code, str)):
+            raise TypeError('Invalid input')
+        if (rta or '').upper() not in RTA_MAP:
+            raise ValueError(f'Invalid RTA: {rta}')
+        results = []
+        if isin is not None:
+            results = self.direct_isin_lookup(isin)
+        if not results:
+            results = self.scheme_lookup(rta, scheme_name, rta_code)
+        if not results:
+            raise ValueError('No schemes found')
+        # Take the first match (db is ordered by id desc in the original; we kept insertion order)
+        r = results[0]
+        return SchemeData(name=r['name'], isin=r['isin'],
+                          amfi_code=r['amfi_code'], type=r['type'], score=100)
+
+    def nav_lookup(self, isin):
+        return None  # FMV handled by tax_harvest's own snapshot file
+
+class ISINDb(_Base):
+    def lookup(self, isin):
+        db = _load()
+        rec = db['isin_to'].get(isin)
+        if not rec: return None
+        amfi_code, type_, name = rec
+        return SchemeData(name=name, isin=isin, amfi_code=amfi_code,
+                          type=type_, score=100)
+
+__version__ = 'pyodide-stub-1.0'
+""")
+import micropip
+await micropip.install([
+    'click>=7.0,<9.0',
+    'colorama>=0.4.6,<0.5',
+    'pdfminer.six==20240706',
+    'python-dateutil>=2.8.2,<3',
+    'rich>=13.5.2,<14',
+    'pydantic>=2.3.0,<3',
+])
+await micropip.install('casparser', deps=False)
+`);
+
+  setStatus('busy', '⏳ Installing tax-harvest engine…', 'Local wheel');
+  // Get current page URL base so wheel + data files load from same origin.
+  const base = new URL('.', window.location.href).href;
+  await pyodide.runPythonAsync(`
+import micropip
+await micropip.install("${base}data/tax_harvest-0.1.0-py3-none-any.whl")
+import tax_harvest
+`);
+
+  setStatus('busy', '⏳ Loading NAV + FMV snapshots + ISIN DB…', 'Mirrored daily from AMFI; ISIN DB shipped statically');
+  // Pre-populate Pyodide FS at the paths the engine expects.
+  pyodide.runPython("import os; os.makedirs('cache', exist_ok=True)");
+
+  const [navResp, fmvResp, isinResp] = await Promise.all([
+    fetch(base + 'data/nav_cache.txt'),
+    fetch(base + 'data/fmv_jan_2018.txt'),
+    fetch(base + 'data/isin_db.json'),
+  ]);
+  if (!navResp.ok)  throw new Error(`NAV mirror missing: ${navResp.status}. GitHub Actions cron may have failed.`);
+  if (!fmvResp.ok)  throw new Error(`FMV snapshot missing: ${fmvResp.status}.`);
+  if (!isinResp.ok) throw new Error(`ISIN DB missing: ${isinResp.status}.`);
+  const [navText, fmvText, isinText] = await Promise.all([
+    navResp.text(), fmvResp.text(), isinResp.text(),
+  ]);
+  pyodide.FS.writeFile('cache/nav_cache.txt', navText);
+  pyodide.FS.writeFile('cache/fmv_jan_2018.txt', fmvText);
+  pyodide.FS.writeFile('cache/isin_db.json', isinText);
+
+  engineReady = true;
+  engineStatusEl.textContent = '✓ Engine ready';
+  computeBtn.disabled = false;
+  setStatus('idle', '✓ Engine loaded. Fill the form above, then click Compute.');
+}
+
+async function readFileAsBytes(file) {
+  return new Uint8Array(await file.arrayBuffer());
+}
+async function readFileAsText(file) { return await file.text(); }
+
+async function runPlan(evt) {
+  evt.preventDefault();
+  if (!engineReady) return;
+
+  const casFile = $('#cas').files[0];
+  const password = $('#pwd').value;
+  const stocksLtcg = parseFloat($('#stocks-ltcg').value) || 0;
+  const stocksLtcl = parseFloat($('#stocks-ltcl').value) || 0;
+  const ledgerFile = $('#ledger').files[0] || null;
+  const buffer = parseFloat($('#buffer').value) || 0;
+  const fyOverride = $('#fy').value.trim() || null;
+
+  if (!casFile) return setStatus('err', 'Please select a CAS PDF.');
+  if (!password) return setStatus('err', 'Please enter the PDF password.');
+
+  computeBtn.disabled = true;
+  reportEl.style.display = 'none';
+  setStatus('busy', '⏳ Running the harvest pipeline…', 'Parsing CAS · evaluating lots · building plan');
+
+  try {
+    const casBytes = await readFileAsBytes(casFile);
+    pyodide.FS.writeFile('/tmp/cas.pdf', casBytes);
+    let ledgerPathArg = 'None';
+    if (ledgerFile) {
+      const csvText = await readFileAsText(ledgerFile);
+      pyodide.FS.writeFile('/tmp/stocks.csv', csvText);
+      ledgerPathArg = "Path('/tmp/stocks.csv')";
+    }
+
+    // Bind inputs into the Python namespace then run the pipeline.
+    pyodide.globals.set('PASSWORD', password);
+    pyodide.globals.set('STOCKS_LTCG', stocksLtcg);
+    pyodide.globals.set('STOCKS_LTCL', stocksLtcl);
+    pyodide.globals.set('BUFFER_PCT', buffer);
+    pyodide.globals.set('FY_OVERRIDE', fyOverride);
+
+    const md = await pyodide.runPythonAsync(`
+from pathlib import Path
+from datetime import date
+from tax_harvest.parser import parse_cas
+from tax_harvest.classifier import load_overrides, load_suspended_isins
+from tax_harvest.nav import load_nav_index
+from tax_harvest.fmv_2018 import load_fmv_index
+from tax_harvest.lots import evaluate_lots
+from tax_harvest.harvest import build_plan
+from tax_harvest.loss_harvest import find_loss_candidates
+from tax_harvest.stocks import load_stocks_adjustment
+from tax_harvest.timing import compute_advisory
+from tax_harvest.report import _render_markdown
+from tax_harvest.models import SchemeCategory
+
+def _current_fy_label(today):
+    if today.month >= 4:
+        return f"{today.year}-{str(today.year + 1)[-2:]}"
+    return f"{today.year - 1}-{str(today.year)[-2:]}"
+
+fy_label = FY_OVERRIDE or _current_fy_label(date.today())
+
+# Stocks
+stocks = load_stocks_adjustment(
+    flat_ltcg=(STOCKS_LTCG or None),
+    flat_ltcl=(STOCKS_LTCL or None),
+    ledger_path=(${ledgerPathArg}),
+    fy_label=fy_label,
+)
+
+# CAS
+cas = parse_cas(Path('/tmp/cas.pdf'), PASSWORD,
+                overrides=load_overrides(), suspended_isins=load_suspended_isins())
+if not cas.schemes:
+    raise RuntimeError('No schemes parsed — is this an empty CAS?')
+
+# NAV + FMV (read from same-origin mirrors written by JS into pyodide FS)
+nav_index = load_nav_index(cache_file=Path('cache/nav_cache.txt'))
+fmv_index = load_fmv_index(cache_file=Path('cache/fmv_jan_2018.txt'))
+
+warnings: list[str] = []
+if nav_index.snapshot_date:
+    warnings.append(f"NAVs from AMFI snapshot dated {nav_index.snapshot_date}")
+if fmv_index and fmv_index.snapshot_date:
+    warnings.append(f"FMVs from 31-Jan-2018 snapshot ({fmv_index.snapshot_date})")
+if cas.is_nri:
+    warnings.append("NRI status detected/asserted — TDS rules differ; verify with CA")
+if cas.has_joint_holdings:
+    warnings.append("Joint holding(s) detected/asserted — confirm primary-holder tax liability")
+for s in cas.schemes:
+    if s.category == SchemeCategory.UNKNOWN:
+        warnings.append(f"Unclassified scheme — verify manually: {s.scheme_name}")
+    if s.category == SchemeCategory.INTERNATIONAL:
+        warnings.append(f"International/global FoF — confirm equity vs debt treatment for: {s.scheme_name}")
+    if s.category == SchemeCategory.GOLD:
+        warnings.append(f"Gold/silver scheme — confirm post-Budget-2024 treatment for: {s.scheme_name}")
+    if s.is_demat:
+        warnings.append(f"Demat-held units may be missing from CAS for: {s.scheme_name}")
+    if s.is_suspended:
+        warnings.append(f"Known suspended/wound-up scheme: {s.scheme_name}")
+
+evaluations = evaluate_lots(cas.schemes, nav_lookup=nav_index.lookup,
+                            today=date.today(), fmv_lookup=fmv_index.lookup)
+
+if nav_index.unmatched:
+    for name in sorted(set(nav_index.unmatched)):
+        warnings.append(f"NAV not matched on AMFI feed: {name}")
+if fmv_index and fmv_index.unmatched:
+    for name in sorted(set(fmv_index.unmatched)):
+        warnings.append(f"31-Jan-2018 FMV not matched (pre-2018 equity lot): {name}")
+
+stocks_net = stocks.net_ltcg
+effective_already_realized = max(0.0, stocks_net)
+effective_carry_forward = max(0.0, -stocks_net)
+if not stocks.is_empty():
+    warnings.append(
+        f"Stocks LTCG ₹{stocks.realized_ltcg:,.2f} / LTCL ₹{stocks.realized_ltcl:,.2f} "
+        f"→ net ₹{stocks_net:,.2f} folded into the Sec 112A budget"
+    )
+
+buffer_pct = max(0.0, min(BUFFER_PCT or 0.0, 10.0))
+buffer_amount = 0.0
+if buffer_pct > 0:
+    base_budget = 125000.0 - effective_already_realized + effective_carry_forward
+    buffer_amount = max(0.0, base_budget * buffer_pct / 100.0)
+    effective_already_realized += buffer_amount
+    warnings.append(
+        f"Safety buffer {buffer_pct:.2f}% applied → ₹{buffer_amount:,.2f} of "
+        f"headroom held back to absorb adverse NAV move"
+    )
+
+# Dedupe warnings
+seen = set()
+warnings = [w for w in warnings if not (w in seen or seen.add(w))]
+
+plan = build_plan(evaluations, fy_label=fy_label,
+                  already_realized_ltcg=effective_already_realized,
+                  carry_forward_losses=effective_carry_forward,
+                  warnings=warnings)
+losses = find_loss_candidates(evaluations)
+advisory = compute_advisory(nav_index.snapshot_date)
+_render_markdown(plan, losses, stocks=stocks, cli_already_realized=0.0,
+                 advisory=advisory, safety_buffer_pct=buffer_pct,
+                 safety_buffer_amount=buffer_amount)
+`);
+
+    reportEl.innerHTML = marked.parse(md);
+    reportEl.style.display = 'block';
+    setStatus('ok', '✓ Plan ready. Review below + verify on your AMC portal before placing orders.');
+    reportEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    setStatus('err', '✗ Pipeline failed:\n' + (e.message || e.toString()));
+    console.error(e);
+  } finally {
+    computeBtn.disabled = false;
+  }
+}
+
+$('#form').addEventListener('submit', runPlan);
+$('#reset').addEventListener('click', () => {
+  $('#form').reset();
+  reportEl.style.display = 'none';
+  setStatus('idle', 'Reset. Fill the form, then click Compute.');
+});
+
+bootEngine().catch(e => {
+  setStatus('err', 'Engine boot failed:\n' + (e.message || e.toString()));
+  console.error(e);
+});
+</script>
+</body>
+</html>

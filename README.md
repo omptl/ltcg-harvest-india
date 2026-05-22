@@ -8,9 +8,27 @@ Single-user, runs locally, no server, no PII leaves the machine.
 
 ---
 
-## Two ways to use this
+## 🌐 Try it in your browser — no install
 
-### A. Drive it via your AI coding agent (recommended)
+A 100% client-side build runs on GitHub Pages: **https://omptl.github.io/MFHarvest/**
+
+- Your CAS PDF, password, and broker P&L are processed **in your browser**
+  via WebAssembly Python (Pyodide). Nothing is uploaded, logged, or sent
+  to any server.
+- Same engine as the CLI — produces identical plans for the same inputs.
+- First load is ~15 MB (Pyodide runtime + ISIN DB + NAV snapshot), cached
+  after that.
+- AMFI NAV is mirrored daily by a GitHub Actions cron (the upstream feed
+  blocks cross-origin browser fetch).
+
+If you'd rather run it locally or drive it via your AI coding agent, both
+paths still work — see below.
+
+---
+
+## Three ways to use this
+
+### A. Drive it via your AI coding agent (for forking + extending)
 
 If you've just forked this repo and you have Claude Code, Codex, Cursor,
 Copilot Chat, Aider, Windsurf, or any other agentic coding tool, the fastest

@@ -1,0 +1,65 @@
+name: Mirror AMFI NAV + rebuild wheel
+
+# Browser builds of tax-harvest cannot cross-origin fetch AMFI's NAVAll.txt.
+# Mirror it to web/data/ on a daily cron so the static site reads a same-origin
+# copy. Also re-build the tax_harvest wheel whenever the Python source changes
+# so the web UI installs the latest engine.
+
+on:
+  schedule:
+    - cron: "0 18 * * 1-5"   # 18:00 UTC = 23:30 IST weekdays, after AMFI NAV publishes
+  push:
+    paths:
+      - "tax_harvest/**"
+      - ".github/workflows/mirror-nav.yml"
+  workflow_dispatch:           # manual trigger from Actions tab
+
+permissions:
+  contents: write              # so the job can commit refreshed files back
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch AMFI NAVAll.txt
+        run: |
+          mkdir -p web/data
+          curl -sSL --fail --retry 3 \
+            -o web/data/nav_cache.txt.new \
+            "https://www.amfiindia.com/spages/NAVAll.txt"
+          # Sanity: AMFI feed should be > 500 KB. Anything smaller = upstream blip.
+          size=$(stat -c '%s' web/data/nav_cache.txt.new)
+          if [ "$size" -lt 500000 ]; then
+            echo "::error::Fetched NAVAll.txt is only $size bytes, expected >500KB. Aborting."
+            rm web/data/nav_cache.txt.new
+            exit 1
+          fi
+          mv web/data/nav_cache.txt.new web/data/nav_cache.txt
+          echo "Mirrored $size bytes from AMFI."
+
+      - name: Rebuild tax_harvest wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel --outdir web/data/
+          # Drop any stale wheel — keep only the latest version
+          cd web/data
+          ls -t tax_harvest-*.whl | tail -n +2 | xargs -r rm -f
+
+      - name: Commit refreshed artifacts
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add web/data/nav_cache.txt web/data/tax_harvest-*.whl
+          if git diff --staged --quiet; then
+            echo "Nothing to commit — NAV + wheel unchanged."
+          else
+            git commit -m "chore(web): refresh AMFI NAV mirror + tax_harvest wheel"
+            git push
+          fi
