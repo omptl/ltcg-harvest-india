@@ -86,24 +86,61 @@ Each stage is a pure function of its inputs — easy to unit-test, easy to swap.
 
 ---
 
-## Module map
+## Repository layout
 
 ```
-tax_harvest/
+tax_harvest/                       The Python engine — shared by CLI + web build.
 ├── main.py            CLI: argparse, getpass for PDF password, glue
 ├── models.py          Pydantic v2 models — single source of truth for shapes
 ├── parser.py          casparser wrapper + NRI/joint heuristics + txn-type mapping
 ├── classifier.py      Name-regex → SchemeCategory; override loader; suspended list
 ├── lots.py            FIFO replay; lock-in / exit-load / LTCG eligibility / grandfathering
-├── nav.py             AMFI NAVAll.txt fetch + 24h cache + ISIN/code/name lookup
+├── nav.py             AMFI NAVAll.txt fetch + cache + ISIN/code/name lookup
 ├── fmv_2018.py        AMFI 31-Jan-2018 snapshot for Sec 112A pre-2018 cost uplift
 ├── harvest.py         Greedy gain-per-unit-desc fill; marginal-lot fractional cut
 ├── loss_harvest.py    STCL vs LTCL candidate identification
-├── report.py          Rich console tables + timestamped JSON report writer
+├── stocks.py          Stocks ledger / flat-input adjustment (LTCG/LTCL netting)
+├── timing.py          IST cut-off advisory + NAV-staleness gap
+├── report.py          Rich console tables + JSON + Markdown writers
 ├── data/
 │   ├── category_overrides.json   Packaged ISIN → SchemeCategory overrides
 │   └── suspended_schemes.json    Packaged wound-up scheme list (empty by default)
-└── tests/             62 pytest tests across 6 files
+└── tests/                        92+ pytest tests across 8 files
+
+web/                               In-browser build (Pyodide).
+├── index.html         UI + Pyodide bootstrap + casparser_isin pure-Python stub.
+├── spike.html         Day-1 compatibility test, kept as a regression.
+└── data/
+    ├── nav_cache.txt              AMFI NAV mirror, refreshed daily by GH cron.
+    ├── fmv_jan_2018.txt           31-Jan-2018 historical FMV snapshot (immutable).
+    ├── isin_db.json               Slim scheme DB (sidesteps rapidfuzz in browser).
+    └── tax_harvest-*.whl          Engine wheel, installed via micropip at boot.
+
+scripts/
+└── e2e_web_test.py    Playwright headless drive that verifies the browser
+                       build's output matches the CLI's output, lot for lot.
+                       Reads all secrets from LTCGH_* env vars (see .env.example).
+
+prompts/
+└── harvest-runner.md  Tool-agnostic paste prompt for any agentic coding tool.
+
+.claude/                           Claude Code conveniences (cross-tool agents
+├── agents/                        live in AGENTS.md as well).
+│   ├── harvest-runner.md          Interactive driver: gather → install → run → read.
+│   └── tax-rule-auditor.md        Read-only audit of cheat-sheet ↔ code ↔ tests.
+├── skills/
+│   └── tax-rule-change/SKILL.md   3-file update checklist (code + cheat sheet + test).
+└── settings.json                  Project-scoped plugins + PostToolUse pytest hook.
+
+.github/workflows/
+├── mirror-nav.yml     Daily cron: refresh nav_cache.txt + rebuild wheel.
+└── deploy-pages.yml   Publish web/ to https://omptl.github.io/ltcg-harvest-india/
+
+AGENTS.md              Cross-tool agent guide (Codex, Cursor, Copilot, Aider, …).
+CLAUDE.md              @-imports AGENTS.md; adds Claude-Code-specific extras.
+CONTRIBUTING.md        Dev setup, tax-rule change rules, sensitive-data policy.
+README.md              User-facing entry point.
+.mcp.json              Project-scoped MCP servers (context7, agent-browser).
 ```
 
 ### Module responsibilities (one-liners)
@@ -317,16 +354,18 @@ loss-candidate list.
 
 ## Test coverage
 
-62 tests total, ~0.2s wall time, split across:
+92+ tests total, ~1s wall time, split across:
 
 | File | Tests | Focus |
 | --- | --- | --- |
 | `test_lots.py` | 9 | FIFO depletion, bonus zero-cost, switch in/out, dividend reinvest, ELSS lock-in, Sec 50AA debt, pre-Apr-2023 debt LTCG eligibility, equity <1yr exclusion, unknown scheme handling, over-redemption robustness |
-| `test_harvest.py` | 9 | Plan fills budget without exceeding, `--already-realized` shrinks budget, `--carry-forward-loss` expands budget, gain-per-unit ordering, empty input, locked lot exclusion, loss lots not harvested, marginal-lot truncation, multi-lot aggregation |
+| `test_harvest.py` | 12 | Plan fills budget without exceeding; `--already-realized` shrinks budget; `--carry-forward-loss` expands budget; gain-per-unit ordering; empty input; locked lot exclusion; loss lots not harvested; marginal-lot truncation; multi-lot aggregation; Markdown report renders action block + safety-buffer row + omits buffer row when zero; JSON report does not embed full transaction history per lot |
 | `test_classifier.py` | 18 | Name-heuristic across 15 representative schemes, unknown returns UNKNOWN, debt pre/post Apr-2023 refinement, per-lot Sec 50AA bucketing |
-| `test_nav.py` | 4 | AMFI text parser, ISIN/code lookups, unmatched-list tracking |
+| `test_nav.py` | 8 | AMFI text parser, ISIN/code lookups, unmatched-list tracking, snapshot_date uses mode-not-last, historical-format parser (8-col Repurchase/Sale), empty-cache file triggers refetch |
 | `test_grandfathering.py` | 8 | Cost formula (3 algebraic cases), pre-2018 application, post-2018 skip, debt skip, FMV-disabled, FMV-missing |
 | `test_overrides_and_extras.py` | 14 | Override semantics, file loading + validation, suspended-lot exclusion, NRI/joint heuristic detection (positive + negative), configurable exit-load window |
+| `test_stocks.py` | 8 | Flat-LTCG / flat-LTCL flags; CSV FY-filter; CSV separates LTCG + LTCL within long-term rows; loss-heavy year → negative net; date-format flexibility; blank sell_date = open position; missing-column + missing-file errors |
+| `test_timing.py` | 9 | GREEN before cut-off; AMBER after cut-off; weekend → next weekday; cutoff boundary exact; multi-day NAV staleness warning; one-day intraday-range note; missing plan-NAV-date doesn't crash |
 
 ```
 python -m pytest tax_harvest/tests

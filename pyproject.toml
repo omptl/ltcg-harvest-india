@@ -5,14 +5,39 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tax-harvest"
 version = "0.1.0"
-description = "Personal LTCG harvesting tool for Indian mutual fund investors"
+description = "Section 112A LTCG harvesting calculator for Indian retail mutual fund investors. Runs entirely on your machine — no PII upload."
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
+authors = [{ name = "omptl" }]
+keywords = ["india", "mutual-funds", "ltcg", "section-112a", "tax-harvesting", "capital-gains", "cas-parser"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: WebAssembly :: Emscripten",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
 dependencies = [
     "casparser>=0.7.4",
     "requests>=2.31",
     "rich>=13.7",
     "pydantic>=2.6",
 ]
+
+[project.urls]
+Homepage = "https://omptl.github.io/ltcg-harvest-india/"
+Repository = "https://github.com/omptl/ltcg-harvest-india"
+Issues = "https://github.com/omptl/ltcg-harvest-india/issues"
+Documentation = "https://github.com/omptl/ltcg-harvest-india/blob/main/PROJECT_OVERVIEW.md"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
