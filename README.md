@@ -13,27 +13,44 @@ Single-user, runs locally, no server, no PII leaves the machine. MIT licensed.
 
 ---
 
-## 🌐 Try it in your browser — no install
+## How it works (30-second version)
 
-A 100% client-side build runs on GitHub Pages: **https://omptl.github.io/ltcg-harvest-india/**
+LTCG Harvest India parses your **Consolidated Account Statement (CAS) PDF**
+from MF Central / CAMS / KFintech, replays every buy / SIP / switch /
+dividend reinvest / redemption in chronological order, builds a per-folio
+FIFO lot queue, fetches today's NAV from AMFI, then runs a greedy harvest
+algorithm to pick the units to redeem that maximise booked LTCG without
+overshooting the **₹1.25 lakh Sec 112A exemption** for the current Indian
+financial year. It applies Sec 112A grandfathering for pre-31-Jan-2018 lots,
+Sec 50AA for post-1-Apr-2023 debt units (per-lot, not per-scheme), and
+nets stocks LTCG/LTCL (Sec 112A bucket is shared across listed equity).
+Output is a one-page Markdown plan saying "sell N units of scheme X"
+plus a JSON dump. The browser build runs the same Python engine via
+Pyodide — same arithmetic, zero data upload.
+
+---
+
+## Three ways to use it
+
+### A. In your browser (zero install, recommended for most users)
+
+**https://omptl.github.io/ltcg-harvest-india/**
 
 - Your CAS PDF, password, and broker P&L are processed **in your browser**
   via WebAssembly Python (Pyodide). Nothing is uploaded, logged, or sent
   to any server.
-- Same engine as the CLI — produces identical plans for the same inputs.
-- First load is ~15 MB (Pyodide runtime + ISIN DB + NAV snapshot), cached
-  after that.
+- Same engine as the CLI — produces identical plans for the same inputs
+  (verified by a Playwright end-to-end test in `scripts/e2e_web_test.py`).
+- First load is ~15 MB (Pyodide runtime + ISIN database + NAV snapshot),
+  cached after that.
 - AMFI NAV is mirrored daily by a GitHub Actions cron (the upstream feed
   blocks cross-origin browser fetch).
+- Limitation: handles CAMS / KFintech / MF Central CAS PDFs. NSDL/CDSL
+  demat-only CAS is out of scope for the browser build (the SQLite ISIN
+  database casparser uses for demat CAS does not fit in the browser bundle).
+  Use Path C below for those.
 
-If you'd rather run it locally or drive it via your AI coding agent, both
-paths still work — see below.
-
----
-
-## Three ways to use this
-
-### A. Drive it via your AI coding agent (for forking + extending)
+### B. Drive it via your AI coding agent (for forking + extending)
 
 If you've just forked this repo and you have Claude Code, Codex, Cursor,
 Copilot Chat, Aider, Windsurf, or any other agentic coding tool, the fastest
@@ -59,7 +76,7 @@ The agent is briefed via [`AGENTS.md`](AGENTS.md) (cross-tool) and
 [`CLAUDE.md`](CLAUDE.md) (Claude-specific extras). Both files load
 automatically in tools that support those conventions.
 
-### B. Drive it yourself (no agent)
+### C. Drive it yourself (CLI, no agent)
 
 ```
 python -m pip install -e .[dev]
@@ -263,6 +280,8 @@ transacting.**
 
 ## Definition of Done — what you still need to verify against your real CAS
 
+Regardless of which path you used (browser / agent / CLI):
+
 1. Reads your CAS PDF without error.
 2. Correctly identifies your LTCG-eligible lots — spot-check a few against
    CAMS / KFintech / MF Central online statements.
@@ -270,8 +289,15 @@ transacting.**
    effective budget (top-right of the Markdown summary).
 4. Unit counts, purchase dates, and cost basis in the action table
    reconcile with your AMC portal.
+5. Booked stock LTCG/LTCL (if any) is reflected in the Budget table's
+   "Net stocks position" row.
+6. NAV snapshot date in the warnings panel is recent (≤ 1 trading day).
+   If it's older, the GitHub Actions NAV mirror has lagged — for the
+   browser build wait for the next cron; for the CLI rerun with
+   `--no-cache`.
 
-Run with `--no-report` first if you don't want a JSON dump while testing.
+CLI users: pass `--no-report` if you don't want a JSON + Markdown dump
+while testing.
 
 ---
 
@@ -295,6 +321,23 @@ tax_harvest/
 │   ├── category_overrides.json   # ISIN → SchemeCategory overrides
 │   └── suspended_schemes.json    # known wound-up scheme list
 └── tests/                         # 92+ tests, ~1s
+
+web/
+├── index.html       # In-browser UI (Pyodide-driven)
+├── spike.html       # Day-1 compatibility test, kept as regression
+└── data/
+    ├── nav_cache.txt              # AMFI NAV mirror, refreshed by GH cron
+    ├── fmv_jan_2018.txt           # 31-Jan-2018 historical FMV snapshot
+    ├── isin_db.json               # Slim scheme DB (sidesteps rapidfuzz in browser)
+    └── tax_harvest-*.whl          # Engine wheel, installed via micropip
+
+scripts/
+└── e2e_web_test.py  # Playwright headless drive that verifies the browser
+                     # build's output matches the CLI's output, lot for lot.
+
+.github/workflows/
+├── mirror-nav.yml   # Daily cron: refresh nav_cache.txt + rebuild wheel.
+└── deploy-pages.yml # Publish web/ to https://omptl.github.io/ltcg-harvest-india/
 ```
 
 Architecture deep-dive (data flow, design decisions, tax-rule cheat sheet,
