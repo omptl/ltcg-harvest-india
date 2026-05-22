@@ -43,7 +43,8 @@ class RedemptionAdvisory:
 
 
 def compute_advisory(plan_nav_date_str: Optional[str],
-                     now_utc: Optional[datetime] = None) -> RedemptionAdvisory:
+                     now_utc: Optional[datetime] = None,
+                     context: str = "cli") -> RedemptionAdvisory:
     """Build a redemption-window advisory.
 
     `plan_nav_date_str` is whatever NavIndex.snapshot_date returned (string in
@@ -51,7 +52,16 @@ def compute_advisory(plan_nav_date_str: Optional[str],
     plan-NAV freshness".
 
     `now_utc` is injectable for tests; defaults to the real clock.
+    `context` controls channel-specific phrasing ("cli" or "web") — CLI users
+    refresh via a flag, web users by reloading the page after the daily NAV
+    cron has run.
     """
+    refresh_hint = (
+        "reload the page (Ctrl+Shift+R / Cmd+Shift+R) to pick up the freshly "
+        "mirrored NAV"
+        if context == "web"
+        else "rerun with `--no-cache` to refresh AMFI prices"
+    )
     if now_utc is None:
         now_utc = datetime.now(timezone.utc)
     now_ist = now_utc.astimezone(IST)
@@ -118,8 +128,7 @@ def compute_advisory(plan_nav_date_str: Optional[str],
                 f"{plan_date.strftime('%d-%b-%Y')} NAV snapshot — your transaction "
                 f"will price at the {applicable_date.strftime('%d-%b-%Y')} closing NAV, "
                 f"a **{gap_days}-day** gap. Mid-cap funds typically move ±1–2% per "
-                f"day. Consider rerunning with `--no-cache` to refresh AMFI prices "
-                f"before placing orders."
+                f"day. Consider {refresh_hint} before placing orders."
             )
         elif gap_days == 1:
             details.append(

@@ -164,7 +164,8 @@ def write_markdown_report(plan: HarvestPlan, loss_candidates: list[LossCandidate
                           cli_already_realized: float | None = None,
                           advisory: RedemptionAdvisory | None = None,
                           safety_buffer_pct: float = 0.0,
-                          safety_buffer_amount: float = 0.0) -> Path:
+                          safety_buffer_amount: float = 0.0,
+                          context: str = "cli") -> Path:
     """Write a one-page Markdown summary that a non-developer can act on.
 
     The JSON report carries the full state for programmatic use; this Markdown
@@ -185,7 +186,8 @@ def write_markdown_report(plan: HarvestPlan, loss_candidates: list[LossCandidate
                          cli_already_realized=cli_already_realized,
                          advisory=advisory,
                          safety_buffer_pct=safety_buffer_pct,
-                         safety_buffer_amount=safety_buffer_amount),
+                         safety_buffer_amount=safety_buffer_amount,
+                         context=context),
         encoding="utf-8",
     )
     return out_path
@@ -196,7 +198,31 @@ def _render_markdown(plan: HarvestPlan, loss_candidates: list[LossCandidate],
                      cli_already_realized: float | None = None,
                      advisory: RedemptionAdvisory | None = None,
                      safety_buffer_pct: float = 0.0,
-                     safety_buffer_amount: float = 0.0) -> str:
+                     safety_buffer_amount: float = 0.0,
+                     context: str = "cli") -> str:
+    # Channel-specific phrasings — keep the report useful whether a user reads
+    # it after a CLI run (has the JSON file, knows flags) or in the browser
+    # (no files on disk; flags are filled in via a form).
+    is_web = context == "web"
+    _stocks_hint = (
+        "fill the **Stocks LTCG / LTCL** fields in section 2 above (or upload a "
+        "broker tax-P&L file) and click **Compute** again"
+        if is_web
+        else "pass `--stocks-ltcg <amount>` (or a CSV via `--stocks-ledger`)"
+    )
+    _stale_nav_hint = (
+        "reload the page (Ctrl+Shift+R / Cmd+Shift+R) to pick up the freshly "
+        "mirrored NAV"
+        if is_web
+        else "rerun with `--no-cache`"
+    )
+    _loss_overflow_msg = (
+        # Web: show all candidates inline so the user doesn't need a JSON file
+        # they don't have. Setting MAX = None elsewhere disables truncation.
+        None
+        if is_web
+        else "more in the JSON report"
+    )
     lines: list[str] = []
     lines.append(f"# LTCG Harvest Plan — FY {plan.fy_label}")
     lines.append("")
@@ -256,10 +282,12 @@ def _render_markdown(plan: HarvestPlan, loss_candidates: list[LossCandidate],
             f"top-up redemption tomorrow against the now-known NAV."
         )
         lines.append("")
-    lines.append("> The ₹1.25 L Sec 112A exemption is **shared across listed equity shares, "
-                 "equity mutual fund units, and equity business-trust units**. If you also "
-                 "book stock LTCG this FY, pass `--stocks-ltcg <amount>` (or a CSV via "
-                 "`--stocks-ledger`) so this plan shrinks to fit the remaining headroom.")
+    lines.append(
+        "> The ₹1.25 L Sec 112A exemption is **shared across listed equity shares, "
+        "equity mutual fund units, and equity business-trust units**. If you also "
+        f"book stock LTCG this FY, {_stocks_hint} so this plan shrinks to fit the "
+        "remaining headroom."
+    )
     lines.append("")
 
     # --- Action block --------------------------------------------------------
@@ -354,15 +382,21 @@ def _render_markdown(plan: HarvestPlan, loss_candidates: list[LossCandidate],
         lines.append("")
         lines.append("| Scheme | Folio | Purchase | Units | Loss | Type |")
         lines.append("| --- | --- | --- | ---: | ---: | --- |")
-        for c in loss_candidates[:10]:
+        # Web shows all candidates inline (no JSON file to fall back to).
+        # CLI shows top 10 + a pointer to the JSON dump beside the report.
+        max_inline = None if is_web else 10
+        rows = loss_candidates if max_inline is None else loss_candidates[:max_inline]
+        for c in rows:
             ev = c.evaluation
             lines.append(
                 f"| {ev.scheme.scheme_name} | `{ev.scheme.folio}` "
                 f"| {ev.lot.purchase_date.isoformat()} | {ev.lot.units_remaining:,.4f} "
                 f"| ₹{ev.unrealized_gain:,.2f} | {c.loss_type} |"
             )
-        if len(loss_candidates) > 10:
-            lines.append(f"| _…and {len(loss_candidates) - 10} more in the JSON report_ | | | | | |")
+        if max_inline is not None and len(loss_candidates) > max_inline and _loss_overflow_msg:
+            lines.append(
+                f"| _…and {len(loss_candidates) - max_inline} {_loss_overflow_msg}_ | | | | | |"
+            )
         lines.append("")
 
     # --- Warnings ------------------------------------------------------------

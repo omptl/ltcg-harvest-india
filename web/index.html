@@ -431,6 +431,54 @@
       </div>
     </div>
 
+    <!-- ─── Advanced (collapsed) ─── -->
+    <details class="card" style="padding:0;border-radius:var(--radius-lg);">
+      <summary style="cursor:pointer;padding:18px 24px;font-weight:700;color:var(--fg);list-style:none;position:relative;user-select:none;">
+        <span style="display:inline-flex;align-items:center;gap:10px;">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;background:var(--surface-2);color:var(--fg-soft);font-weight:700;font-size:13px;">4</span>
+          Advanced options
+          <span style="font-weight:400;color:var(--muted);font-size:13px;">— skip unless you know you need them</span>
+        </span>
+        <span style="position:absolute;right:24px;top:18px;color:var(--muted);font-weight:400;">＋</span>
+      </summary>
+      <div style="padding:8px 24px 22px;border-top:1px solid var(--line);">
+        <p class="sub" style="color:var(--muted);font-size:13px;margin:12px 0 14px;">
+          For unusual cases the form doesn't cover by default — NRI status, joint
+          holdings, MF gains booked outside this CAS, and prior-year LTCL being
+          set off now. Leave blank if none apply.
+        </p>
+        <div class="grid cols-2">
+          <div class="field-with-help">
+            <label for="already-realized">MF LTCG already booked this FY <span class="hint">₹ from a previous sale</span></label>
+            <input id="already-realized" type="number" min="0" step="0.01" placeholder="0">
+            <span class="hint" style="font-size:12px;color:var(--muted);">
+              Only count MF redemptions <em>outside</em> what's in the CAS above (rare).
+              Stock LTCG goes in section 2.
+            </span>
+          </div>
+          <div class="field-with-help">
+            <label for="carry-forward">Carry-forward LTCL from prior FYs <span class="hint">₹ positive</span></label>
+            <input id="carry-forward" type="number" min="0" step="0.01" placeholder="0">
+            <span class="hint" style="font-size:12px;color:var(--muted);">
+              Long-term capital loss carried from earlier FYs that you're using to
+              expand this year's budget. Different from current-FY stock LTCL
+              (that's in section 2).
+            </span>
+          </div>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:18px;flex-wrap:wrap;">
+          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;">
+            <input id="opt-nri" type="checkbox" style="width:auto;margin:0;accent-color:var(--brand);">
+            Assert NRI status <span class="hint" style="color:var(--muted);">— overrides auto-detect</span>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;">
+            <input id="opt-joint" type="checkbox" style="width:auto;margin:0;accent-color:var(--brand);">
+            Assert joint holdings <span class="hint" style="color:var(--muted);">— overrides auto-detect</span>
+          </label>
+        </div>
+      </div>
+    </details>
+
     <div class="actions">
       <button id="compute" type="submit" disabled>Compute my harvest plan</button>
       <button id="reset" type="button" class="ghost">Reset</button>
@@ -761,6 +809,39 @@ async function readFileAsBytes(file) {
 }
 async function readFileAsText(file) { return await file.text(); }
 
+// Last computed Markdown source (for the Download button below the report).
+let lastReportMarkdown = '';
+let lastReportFy = '';
+
+function _downloadButtonsHTML() {
+  // Injected at the bottom of the rendered report. Inline-styled so the
+  // marked.js wrapper doesn't fight the page CSS.
+  return `
+  <div class="report-actions" style="margin-top:24px;padding-top:18px;border-top:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <button id="dl-md" type="button" class="ghost">⬇ Download as Markdown</button>
+    <span style="color:var(--muted);font-size:12.5px;">
+      Save a copy for your records (or to email to your CA). Opens in any text editor or GitHub.
+    </span>
+  </div>`;
+}
+
+function _wireDownloadButtons() {
+  const btn = document.getElementById('dl-md');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const fy = (lastReportFy || 'plan').replace(/[^a-zA-Z0-9-]/g, '');
+    const ts = new Date().toISOString().slice(0, 16).replace(/[-T:]/g, '');
+    const fname = `ltcg-harvest_${fy || 'plan'}_${ts}.md`;
+    const blob = new Blob([lastReportMarkdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+  });
+}
+
 let openpyxlReady = false;
 async function ensureOpenpyxl() {
   if (openpyxlReady) return;
@@ -887,6 +968,11 @@ async function runPlan(evt) {
   const ledgerFile = $('#ledger').files[0] || null;
   const buffer = parseFloat($('#buffer').value) || 0;
   const fyOverride = $('#fy').value.trim() || null;
+  // Advanced (collapsed) options
+  const alreadyRealized = parseFloat($('#already-realized').value) || 0;
+  const carryForward    = parseFloat($('#carry-forward').value)   || 0;
+  const isNri           = $('#opt-nri').checked;
+  const isJoint         = $('#opt-joint').checked;
 
   if (!casFile) return setStatus('err', 'Please select a CAS PDF.');
   if (!password) return setStatus('err', 'Please enter the PDF password.');
@@ -928,6 +1014,10 @@ xlsx_to_canonical_csv('/tmp/stocks.xlsx', '/tmp/stocks.csv')
     pyodide.globals.set('STOCKS_LTCL', stocksLtcl);
     pyodide.globals.set('BUFFER_PCT', buffer);
     pyodide.globals.set('FY_OVERRIDE', fyOverride);
+    pyodide.globals.set('ALREADY_REALIZED', alreadyRealized);
+    pyodide.globals.set('CARRY_FORWARD', carryForward);
+    pyodide.globals.set('IS_NRI', isNri);
+    pyodide.globals.set('IS_JOINT', isJoint);
 
     const md = await pyodide.runPythonAsync(`
 from pathlib import Path
@@ -964,6 +1054,11 @@ cas = parse_cas(Path('/tmp/cas.pdf'), PASSWORD,
                 overrides=load_overrides(), suspended_isins=load_suspended_isins())
 if not cas.schemes:
     raise RuntimeError('No schemes parsed — is this an empty CAS?')
+# Apply advanced-options overrides from the form.
+if IS_NRI:
+    cas.is_nri = True
+if IS_JOINT:
+    cas.has_joint_holdings = True
 
 # NAV + FMV (read from same-origin mirrors written by JS into pyodide FS)
 nav_index = load_nav_index(cache_file=Path('cache/nav_cache.txt'))
@@ -1001,8 +1096,9 @@ if fmv_index and fmv_index.unmatched:
         warnings.append(f"31-Jan-2018 FMV not matched (pre-2018 equity lot): {name}")
 
 stocks_net = stocks.net_ltcg
-effective_already_realized = max(0.0, stocks_net)
-effective_carry_forward = max(0.0, -stocks_net)
+CLI_ALREADY_REALIZED = float(ALREADY_REALIZED or 0)
+effective_already_realized = CLI_ALREADY_REALIZED + max(0.0, stocks_net)
+effective_carry_forward = float(CARRY_FORWARD or 0) + max(0.0, -stocks_net)
 if not stocks.is_empty():
     warnings.append(
         f"Stocks LTCG ₹{stocks.realized_ltcg:,.2f} / LTCL ₹{stocks.realized_ltcl:,.2f} "
@@ -1029,14 +1125,18 @@ plan = build_plan(evaluations, fy_label=fy_label,
                   carry_forward_losses=effective_carry_forward,
                   warnings=warnings)
 losses = find_loss_candidates(evaluations)
-advisory = compute_advisory(nav_index.snapshot_date)
-_render_markdown(plan, losses, stocks=stocks, cli_already_realized=0.0,
+advisory = compute_advisory(nav_index.snapshot_date, context='web')
+_render_markdown(plan, losses, stocks=stocks,
+                 cli_already_realized=CLI_ALREADY_REALIZED,
                  advisory=advisory, safety_buffer_pct=buffer_pct,
-                 safety_buffer_amount=buffer_amount)
+                 safety_buffer_amount=buffer_amount, context='web')
 `);
 
-    reportEl.innerHTML = marked.parse(md);
+    lastReportMarkdown = md;
+    lastReportFy = (fyOverride || '');  // for the download filename
+    reportEl.innerHTML = marked.parse(md) + _downloadButtonsHTML();
     reportEl.style.display = 'block';
+    _wireDownloadButtons();
     setStatus('ok', '✓ Plan ready. Review below + verify on your AMC portal before placing orders.');
     reportEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) {
