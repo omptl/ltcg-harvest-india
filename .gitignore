@@ -16,7 +16,13 @@ reports/
 .tax_harvest/
 *.log
 
-# Personal financial data — never commit
+# Personal financial data + secrets — never commit
 *.pdf
+*.xlsx
+*.xls
 my_cas*
 cas*.pdf
+taxpnl*
+.env
+.env.local
+*.secret
