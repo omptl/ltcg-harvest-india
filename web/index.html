@@ -108,9 +108,10 @@
 
 <main>
   <div class="privacy">
-    <strong>🔒 100% client-side.</strong>
-    Your CAS PDF, password, and broker P&L are processed in your browser via WebAssembly Python (Pyodide).
-    Nothing is uploaded, logged, or sent to any server.
+    <strong>🔒 100% client-side. Nothing to install on your machine.</strong>
+    Your CAS PDF, password, and broker P&amp;L are processed in your browser via WebAssembly Python (Pyodide).
+    The Python runtime + tax-harvest engine are downloaded into your browser tab (sandboxed, cached after the first visit) —
+    nothing touches your OS, PATH, or filesystem; nothing is uploaded, logged, or sent to any server.
     <a href="https://github.com/omptl/ltcg-harvest-india" target="_blank" rel="noopener">View source on GitHub →</a>
   </div>
 
@@ -175,7 +176,7 @@
     <div class="actions">
       <button id="compute" type="submit" disabled>Compute plan</button>
       <button id="reset" type="button" class="ghost">Reset</button>
-      <span class="hint" id="enginestatus">Engine loading…</span>
+      <span class="hint" id="enginestatus">Engine loading into browser tab (first visit only)…</span>
     </div>
   </form>
 
@@ -208,7 +209,7 @@ let pyodide = null;
 let engineReady = false;
 
 async function bootEngine() {
-  setStatus('busy', '⏳ Loading Python runtime…', 'Pyodide bundle ~10 MB, cached after first load');
+  setStatus('busy', '⏳ Loading Python runtime into this browser tab…', 'Pyodide bundle ~10 MB, sandboxed in the tab, cached after first visit. Nothing installs on your machine.');
   pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.4/full/' });
 
   setStatus('busy', '⏳ Loading C-extension wheels…', 'micropip + cryptography');

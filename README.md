@@ -32,7 +32,7 @@ Pyodide — same arithmetic, zero data upload.
 
 ## Three ways to use it
 
-### A. In your browser (zero install, recommended for most users)
+### A. In your browser (nothing to install on your machine — recommended for most users)
 
 **https://omptl.github.io/ltcg-harvest-india/**
 
@@ -41,8 +41,12 @@ Pyodide — same arithmetic, zero data upload.
   to any server.
 - Same engine as the CLI — produces identical plans for the same inputs
   (verified by a Playwright end-to-end test in `scripts/e2e_web_test.py`).
-- First load is ~15 MB (Pyodide runtime + ISIN database + NAV snapshot),
-  cached after that.
+- Open the URL → fill the form → done. No Python, no pip, no command line.
+  The page downloads a WebAssembly Python runtime (~15 MB the first time:
+  Pyodide + ISIN database + NAV snapshot) and runs it sandboxed inside
+  your browser tab; the browser cache holds it for subsequent visits, so
+  later runs are instant. All of that happens inside the tab — nothing
+  touches your operating system, PATH, or filesystem.
 - AMFI NAV is mirrored daily by a GitHub Actions cron (the upstream feed
   blocks cross-origin browser fetch).
 - Limitation: handles CAMS / KFintech / MF Central CAS PDFs. NSDL/CDSL
