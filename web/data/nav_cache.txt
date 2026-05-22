@@ -7287,12 +7287,12 @@ Sundaram Mutual Fund
 153667;INF903JA1LY0;-;Sundaram Multi-Factor Fund - Regular - Growth;9.8717;21-May-2026
 153671;INF903JA1LX2;-;Sundaram Multi-Factor Fund - Regular - IDCW Payout;9.8717;21-May-2026
 153668;-;INF903JA1LW4;Sundaram Multi-Factor Fund - Regular - IDCW Reinvestment;9.8717;21-May-2026
-144835;INF903JA1FA2;-;Sundaram Services Fund Direct Plan - Growth;36.8627;20-May-2026
-144836;INF903JA1FB0;-;Sundaram Services Fund Direct Plan - Payout of Income Distribution cum Capital Withdrawal (IDCW) ;21.9546;20-May-2026
-144837;INF903JA1FC8;-;Sundaram Services Fund Direct Plan - Reinvestment of Income Distribution cum Capital Withdrawal (IDCW) ;21.9546;20-May-2026
-144838;INF903JA1EX7;-;Sundaram Services Fund Regular Plan - Growth;33.7282;20-May-2026
-144839;INF903JA1EY5;-;Sundaram Services Fund Regular Plan - Payout of Income Distribution cum Capital Withdrawal (IDCW) ;20.0498;20-May-2026
-144834;INF903JA1EZ2;-;Sundaram Services Fund Regular Plan - Reinvestment of Income Distribution cum Capital Withdrawal (IDCW) ;20.0498;20-May-2026
+144835;INF903JA1FA2;-;Sundaram Services Fund Direct Plan - Growth;36.8374;21-May-2026
+144836;INF903JA1FB0;-;Sundaram Services Fund Direct Plan - Payout of Income Distribution cum Capital Withdrawal (IDCW) ;21.9396;21-May-2026
+144837;INF903JA1FC8;-;Sundaram Services Fund Direct Plan - Reinvestment of Income Distribution cum Capital Withdrawal (IDCW) ;21.9396;21-May-2026
+144838;INF903JA1EX7;-;Sundaram Services Fund Regular Plan - Growth;33.7040;21-May-2026
+144839;INF903JA1EY5;-;Sundaram Services Fund Regular Plan - Payout of Income Distribution cum Capital Withdrawal (IDCW) ;20.0354;21-May-2026
+144834;INF903JA1EZ2;-;Sundaram Services Fund Regular Plan - Reinvestment of Income Distribution cum Capital Withdrawal (IDCW) ;20.0354;21-May-2026
  
 Tata Mutual Fund
  
@@ -10211,10 +10211,10 @@ SBI Mutual Fund
  
 Sundaram Mutual Fund
  
-154123;INF903JA1LZ7;-;Sundaram Income Plus Arbitrage Active FoF Fund-Direct-Growth;10.1754;20-May-2026
-154124;INF903JA1MA8;-;Sundaram Income Plus Arbitrage Active FoF Fund-Direct-IDCW Payout;10.1754;20-May-2026
-154127;INF903JA1MC4;-;Sundaram Income Plus Arbitrage Active FoF Fund-Regular-Growth;10.1656;20-May-2026
-154125;INF903JA1MD2;-;Sundaram Income Plus Arbitrage Active FoF Fund-Regular-IDCW Payout;10.1656;20-May-2026
+154123;INF903JA1LZ7;-;Sundaram Income Plus Arbitrage Active FoF Fund-Direct-Growth;10.1709;21-May-2026
+154124;INF903JA1MA8;-;Sundaram Income Plus Arbitrage Active FoF Fund-Direct-IDCW Payout;10.1709;21-May-2026
+154127;INF903JA1MC4;-;Sundaram Income Plus Arbitrage Active FoF Fund-Regular-Growth;10.1611;21-May-2026
+154125;INF903JA1MD2;-;Sundaram Income Plus Arbitrage Active FoF Fund-Regular-IDCW Payout;10.1611;21-May-2026
  
 Tata Mutual Fund
  
